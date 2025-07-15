@@ -57,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Login realizado com sucesso",
         description: `Bem-vindo, ${user.firstName || user.email}!`,
       });
+      // Força um refresh da página para garantir que o router funcione
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     },
     onError: (error: Error) => {
       toast({
@@ -78,6 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Conta criada com sucesso",
         description: `Bem-vindo ao CampanhaWhats, ${user.firstName || user.email}!`,
       });
+      // Força um refresh da página para garantir que o router funcione
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     },
     onError: (error: Error) => {
       toast({
@@ -99,6 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Logout realizado",
         description: "Você foi desconectado com sucesso",
       });
+      // Força um refresh da página para garantir que o router funcione
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     },
     onError: (error: Error) => {
       toast({

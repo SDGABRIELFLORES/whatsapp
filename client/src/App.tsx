@@ -24,18 +24,10 @@ function Router() {
 
   return (
     <Switch>
-      {!isAuthenticated ? (
-        <>
-          <Route path="/" component={Landing} />
-          <Route path="/auth" component={AuthPage} />
-        </>
-      ) : (
-        <>
-          <Route path="/" component={Dashboard} />
-          <Route path="/admin" component={(user as any)?.isAdmin ? Admin : NotFound} />
-          <Route path="/subscribe" component={Subscribe} />
-        </>
-      )}
+      <Route path="/" component={isAuthenticated ? Dashboard : Landing} />
+      <Route path="/auth" component={isAuthenticated ? Dashboard : AuthPage} />
+      <Route path="/admin" component={isAuthenticated && (user as any)?.isAdmin ? Admin : NotFound} />
+      <Route path="/subscribe" component={isAuthenticated ? Subscribe : AuthPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -8,6 +8,16 @@ CampanhaWhats is a full-stack web application for managing WhatsApp messaging ca
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**2025-01-15**: Routing and Authentication System Fixes
+- Fixed critical routing issues where login/registration caused 404 errors
+- Implemented proper redirection logic with window.location.reload() after auth success
+- Updated App.tsx router to conditionally show components based on authentication state
+- Removed problematic navigate() calls that were causing navigation failures
+- Ensured all authentication flows properly redirect to dashboard after success
+- Fixed logout redirection to landing page
+
 ## System Architecture
 
 ### Frontend Architecture

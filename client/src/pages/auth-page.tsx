@@ -54,7 +54,6 @@ export default function AuthPage() {
 
   // Redirect if already logged in
   if (!isLoading && user) {
-    navigate("/");
     return null;
   }
 
