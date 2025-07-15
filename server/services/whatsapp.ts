@@ -7,21 +7,17 @@ export class WhatsAppService {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
-      // A API retorna uma página HTML com QR Code, vamos extrair o QR Code
-      const html = await response.text();
-      
-      // Se contém "Conectado" significa que já está conectado
-      if (html.includes("Conectado") || html.includes("connected")) {
-        return null; // Já conectado
+
+      // A API agora retorna JSON
+      const data = await response.json();
+
+      // Se já está conectado
+      if (data.isConnected === true || data.connected === true) {
+        return null;
       }
-      
-      // Se contém um QR Code, retornamos uma indicação
-      if (html.includes("qr-code") || html.includes("QR")) {
-        return "QR_CODE_AVAILABLE";
-      }
-      
-      return null;
+
+      // Retorna o QR Code base64 se estiver disponível
+      return data.qrCode || null;
     } catch (error) {
       console.error("Erro ao obter QR Code:", error);
       return null;
@@ -34,21 +30,25 @@ export class WhatsAppService {
       if (!response.ok) {
         return false;
       }
-      
-      const html = await response.text();
-      return html.includes("Conectado") || html.includes("connected");
+
+      const data = await response.json();
+      return data.isConnected === true;
     } catch (error) {
       console.error("Erro ao verificar conexão:", error);
       return false;
     }
   }
 
-  async sendMessage(userId: string, number: string, message: string): Promise<boolean> {
+  async sendMessage(
+    userId: string,
+    number: string,
+    message: string,
+  ): Promise<boolean> {
     try {
       const response = await fetch(`${this.apiUrl}/send`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           userId,
@@ -56,7 +56,7 @@ export class WhatsAppService {
           message,
         }),
       });
-      
+
       return response.ok;
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
@@ -68,13 +68,13 @@ export class WhatsAppService {
     userId: string,
     contacts: Array<{ nome: string; numero: string }>,
     mensagemBase: string,
-    imagemUrl?: string
+    imagemUrl?: string,
   ): Promise<{ success: number; failed: number; errors: string[] }> {
     try {
       const response = await fetch(`${this.apiUrl}/send-bulk`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           userId,
@@ -85,32 +85,32 @@ export class WhatsAppService {
             randomDelayMin: 6000,
             randomDelayMax: 9000,
             batchSize: 10,
-            batchDelayMs: 60000
-          }
+            batchDelayMs: 60000,
+          },
         }),
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        return { 
-          success: data.success || 0, 
-          failed: data.failed || 0,
-          errors: data.errors || []
+        return {
+          success: data.enviados || 0,
+          failed: (data.total || 0) - (data.enviados || 0),
+          errors: data.erros?.map((e) => `${e.nome}: ${e.erro}`) || [],
         };
       }
-      
+
       const errorText = await response.text();
-      return { 
-        success: 0, 
+      return {
+        success: 0,
         failed: contacts.length,
-        errors: [errorText]
+        errors: [errorText],
       };
     } catch (error) {
       console.error("Erro ao enviar mensagens em lote:", error);
-      return { 
-        success: 0, 
+      return {
+        success: 0,
         failed: contacts.length,
-        errors: [error.message]
+        errors: [error.message],
       };
     }
   }
@@ -118,13 +118,13 @@ export class WhatsAppService {
   async disconnect(userId: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.apiUrl}/disconnect`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ userId }),
       });
-      
+
       return response.ok;
     } catch (error) {
       console.error("Erro ao desconectar:", error);
@@ -132,13 +132,15 @@ export class WhatsAppService {
     }
   }
 
-  async getSessions(): Promise<Array<{ userId: string; isConnected: boolean; hasQrCode: boolean }>> {
+  async getSessions(): Promise<
+    Array<{ userId: string; isConnected: boolean; hasQrCode: boolean }>
+  > {
     try {
       const response = await fetch(`${this.apiUrl}/sessions`);
       if (!response.ok) {
         return [];
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error("Erro ao obter sessões:", error);

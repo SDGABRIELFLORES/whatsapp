@@ -24,32 +24,41 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: UpsertUser): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
-  updateUserMercadoPagoInfo(userId: string, mercadopagoSubscriptionId: string): Promise<User>;
+  updateUser(id: string, updates: Partial<User>): Promise<User>;
+  updateUserMercadoPagoInfo(
+    userId: string,
+    mercadopagoSubscriptionId: string,
+  ): Promise<User>;
   updateUserSubscriptionStatus(userId: string, status: string): Promise<User>;
-  
+
   // Campaign operations
   createCampaign(campaign: InsertCampaign): Promise<Campaign>;
   getCampaigns(userId: string): Promise<Campaign[]>;
   getCampaign(id: number, userId: string): Promise<Campaign | undefined>;
   updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign>;
   deleteCampaign(id: number, userId: string): Promise<boolean>;
-  
+
   // Contact operations
   createContact(contact: InsertContact): Promise<Contact>;
   createContacts(contacts: InsertContact[]): Promise<Contact[]>;
   getContacts(userId: string, campaignId?: number): Promise<Contact[]>;
   deleteContacts(userId: string, campaignId?: number): Promise<boolean>;
   updateContact(id: number, updates: Partial<Contact>): Promise<Contact>;
-  
+
   // Campaign log operations
   createCampaignLog(log: InsertCampaignLog): Promise<CampaignLog>;
   getCampaignLogs(campaignId: number): Promise<CampaignLog[]>;
-  
+
   // WhatsApp session operations
-  createOrUpdateWhatsappSession(session: InsertWhatsappSession): Promise<WhatsappSession>;
+  createOrUpdateWhatsappSession(
+    session: InsertWhatsappSession,
+  ): Promise<WhatsappSession>;
   getWhatsappSession(userId: string): Promise<WhatsappSession | undefined>;
-  updateWhatsappSession(userId: string, updates: Partial<WhatsappSession>): Promise<WhatsappSession>;
-  
+  updateWhatsappSession(
+    userId: string,
+    updates: Partial<WhatsappSession>,
+  ): Promise<WhatsappSession>;
+
   // Admin operations
   getAllUsers(): Promise<User[]>;
   getUserStats(): Promise<{
@@ -92,7 +101,19 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateUserMercadoPagoInfo(userId: string, mercadopagoSubscriptionId: string): Promise<User> {
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async updateUserMercadoPagoInfo(
+    userId: string,
+    mercadopagoSubscriptionId: string,
+  ): Promise<User> {
     const [user] = await db
       .update(users)
       .set({
@@ -104,7 +125,10 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateUserSubscriptionStatus(userId: string, status: string): Promise<User> {
+  async updateUserSubscriptionStatus(
+    userId: string,
+    status: string,
+  ): Promise<User> {
     const [user] = await db
       .update(users)
       .set({
@@ -141,7 +165,10 @@ export class DatabaseStorage implements IStorage {
     return campaign;
   }
 
-  async updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+  async updateCampaign(
+    id: number,
+    updates: Partial<Campaign>,
+  ): Promise<Campaign> {
     const [campaign] = await db
       .update(campaigns)
       .set({ ...updates, updatedAt: new Date() })
@@ -151,26 +178,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCampaign(id: number, userId: string): Promise<boolean> {
+    // Primeiro exclui os logs relacionados à campanha
+    await db.delete(campaignLogs).where(eq(campaignLogs.campaignId, id));
+
+    // Depois exclui os contatos relacionados à campanha
+    await db.delete(contacts).where(eq(contacts.campaignId, id));
+
+    // Por fim, exclui a campanha
     const result = await db
       .delete(campaigns)
       .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
+
     return (result.rowCount ?? 0) > 0;
   }
 
   // Contact operations
   async createContact(contact: InsertContact): Promise<Contact> {
-    const [newContact] = await db
-      .insert(contacts)
-      .values(contact)
-      .returning();
+    const [newContact] = await db.insert(contacts).values(contact).returning();
     return newContact;
   }
 
   async createContacts(contactList: InsertContact[]): Promise<Contact[]> {
-    return await db
-      .insert(contacts)
-      .values(contactList)
-      .returning();
+    return await db.insert(contacts).values(contactList).returning();
   }
 
   async getContacts(userId: string, campaignId?: number): Promise<Contact[]> {
@@ -178,28 +207,27 @@ export class DatabaseStorage implements IStorage {
       return await db
         .select()
         .from(contacts)
-        .where(and(eq(contacts.userId, userId), eq(contacts.campaignId, campaignId)));
+        .where(
+          and(eq(contacts.userId, userId), eq(contacts.campaignId, campaignId)),
+        );
     }
-    
-    return await db
-      .select()
-      .from(contacts)
-      .where(eq(contacts.userId, userId));
+
+    return await db.select().from(contacts).where(eq(contacts.userId, userId));
   }
 
   async deleteContacts(userId: string, campaignId?: number): Promise<boolean> {
     let result;
-    
+
     if (campaignId) {
       result = await db
         .delete(contacts)
-        .where(and(eq(contacts.userId, userId), eq(contacts.campaignId, campaignId)));
+        .where(
+          and(eq(contacts.userId, userId), eq(contacts.campaignId, campaignId)),
+        );
     } else {
-      result = await db
-        .delete(contacts)
-        .where(eq(contacts.userId, userId));
+      result = await db.delete(contacts).where(eq(contacts.userId, userId));
     }
-    
+
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -214,10 +242,7 @@ export class DatabaseStorage implements IStorage {
 
   // Campaign log operations
   async createCampaignLog(log: InsertCampaignLog): Promise<CampaignLog> {
-    const [newLog] = await db
-      .insert(campaignLogs)
-      .values(log)
-      .returning();
+    const [newLog] = await db.insert(campaignLogs).values(log).returning();
     return newLog;
   }
 
@@ -230,7 +255,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // WhatsApp session operations
-  async createOrUpdateWhatsappSession(session: InsertWhatsappSession): Promise<WhatsappSession> {
+  async createOrUpdateWhatsappSession(
+    session: InsertWhatsappSession,
+  ): Promise<WhatsappSession> {
     const [existing] = await db
       .select()
       .from(whatsappSessions)
@@ -252,7 +279,9 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getWhatsappSession(userId: string): Promise<WhatsappSession | undefined> {
+  async getWhatsappSession(
+    userId: string,
+  ): Promise<WhatsappSession | undefined> {
     const [session] = await db
       .select()
       .from(whatsappSessions)
@@ -260,7 +289,10 @@ export class DatabaseStorage implements IStorage {
     return session;
   }
 
-  async updateWhatsappSession(userId: string, updates: Partial<WhatsappSession>): Promise<WhatsappSession> {
+  async updateWhatsappSession(
+    userId: string,
+    updates: Partial<WhatsappSession>,
+  ): Promise<WhatsappSession> {
     const [session] = await db
       .update(whatsappSessions)
       .set({ ...updates, updatedAt: new Date() })
@@ -271,10 +303,7 @@ export class DatabaseStorage implements IStorage {
 
   // Admin operations
   async getAllUsers(): Promise<User[]> {
-    return await db
-      .select()
-      .from(users)
-      .orderBy(desc(users.createdAt));
+    return await db.select().from(users).orderBy(desc(users.createdAt));
   }
 
   async getUserStats(): Promise<{
@@ -283,9 +312,7 @@ export class DatabaseStorage implements IStorage {
     totalCampaigns: number;
     totalMessages: number;
   }> {
-    const [totalUsersResult] = await db
-      .select({ count: count() })
-      .from(users);
+    const [totalUsersResult] = await db.select({ count: count() }).from(users);
 
     const [activeUsersResult] = await db
       .select({ count: count() })
