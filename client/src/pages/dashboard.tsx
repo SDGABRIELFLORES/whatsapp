@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,21 +15,28 @@ import {
   Plus,
   BarChart3,
   AlertCircle,
-  Zap
+  Zap,
+  Edit2,
+  Trash2
 } from "lucide-react";
 import CampaignForm from "@/components/campaign-form";
 import QRModal from "@/components/qr-modal";
 import StatsCard from "@/components/stats-card";
-import FeatureShowcase from "@/components/feature-showcase";
+import ContactListsManager from "@/components/contact-lists-manager";
 import Header from "@/components/header";
 import Profile from "@/pages/profile";
 import Subscribe from "@/pages/subscribe";
+import { toast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showQRModal, setShowQRModal] = useState(false);
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const [currentView, setCurrentView] = useState<"dashboard" | "profile" | "subscription">("dashboard");
+  const [editingCampaign, setEditingCampaign] = useState<any>(null);
+  const queryClient = useQueryClient();
+
+
 
   // Fetch campaigns
   const { data: campaigns = [], isLoading: campaignsLoading } = useQuery({
@@ -46,6 +53,43 @@ export default function Dashboard() {
     queryKey: ["/api/whatsapp/status"],
     refetchInterval: 5000,
   });
+
+  // Delete campaign mutation
+  const deleteCampaignMutation = useMutation({
+    mutationFn: async (campaignId: number) => {
+      const response = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete campaign");
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      toast({
+        title: "Campanha excluída",
+        description: "A campanha foi excluída com sucesso!",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteCampaign = (campaignId: number) => {
+    if (confirm("Tem certeza que deseja excluir esta campanha?")) {
+      deleteCampaignMutation.mutate(campaignId);
+    }
+  };
 
   // Calculate stats
   const totalCampaigns = campaigns.length;
@@ -127,12 +171,25 @@ export default function Dashboard() {
         />
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold">Nova Campanha</h1>
-            <Button variant="outline" onClick={() => setShowCampaignForm(false)}>
+            <h1 className="text-2xl font-bold">{editingCampaign ? "Editar Campanha" : "Nova Campanha"}</h1>
+            <Button variant="outline" onClick={() => {
+              setShowCampaignForm(false);
+              setEditingCampaign(null);
+            }}>
               Voltar
             </Button>
           </div>
-          <CampaignForm />
+          <CampaignForm
+            onClose={() => {
+              setShowCampaignForm(false);
+              setEditingCampaign(null);
+            }}
+            onComplete={() => {
+              setShowCampaignForm(false);
+              setEditingCampaign(null);
+            }}
+            editingCampaign={editingCampaign}
+          />
         </div>
       </div>
     );
@@ -156,7 +213,7 @@ export default function Dashboard() {
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="campaigns">Campanhas</TabsTrigger>
-            <TabsTrigger value="features">Funcionalidades</TabsTrigger>
+            <TabsTrigger value="contact-lists">Lista de Contatos</TabsTrigger>
             <TabsTrigger value="contacts">Contatos</TabsTrigger>
           </TabsList>
 
@@ -337,9 +394,34 @@ export default function Dashboard() {
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between">
                         <span className="truncate">{campaign.name}</span>
-                        <Badge className={getStatusColor(campaign.status)}>
-                          {getStatusText(campaign.status)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={getStatusColor(campaign.status)}>
+                            {getStatusText(campaign.status)}
+                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditingCampaign(campaign);
+                                setShowCampaignForm(true);
+                              }}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm("Tem certeza que deseja excluir esta campanha?")) {
+                                  deleteCampaignMutation.mutate(campaign.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -363,8 +445,8 @@ export default function Dashboard() {
             )}
           </TabsContent>
 
-          <TabsContent value="features" className="space-y-6">
-            <FeatureShowcase />
+          <TabsContent value="contact-lists" className="space-y-6">
+            <ContactListsManager />
           </TabsContent>
 
           <TabsContent value="contacts" className="space-y-6">

@@ -21,9 +21,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import FileUpload from "@/components/ui/file-upload";
 import ImageUpload from "@/components/image-upload";
-import { Upload, Users, Send, Clock, UserRound, Filter, Calendar, List } from "lucide-react";
+import { Upload, Users, Send, Clock, UserRound, Filter, Calendar, List, Play } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 const campaignSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -50,7 +52,13 @@ const campaignSchema = z.object({
 
 type CampaignFormData = z.infer<typeof campaignSchema>;
 
-export default function CampaignForm() {
+interface CampaignFormProps {
+  onClose?: () => void;
+  onComplete?: () => void;
+  editingCampaign?: any;
+}
+
+export default function CampaignForm({ onClose, onComplete, editingCampaign }: CampaignFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -61,18 +69,19 @@ export default function CampaignForm() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [daysFilter, setDaysFilter] = useState<number>(7);
   const [isFiltered, setIsFiltered] = useState<boolean>(false);
+  const [executionType, setExecutionType] = useState<"now" | "scheduled">("now");
 
   const form = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchema),
     defaultValues: {
-      name: "",
-      message: "",
-      delayMin: 6,
-      delayMax: 12,
-      batchSize: 10,
-      batchDelay: 1,
-      scheduledAt: "",
-      contactListId: undefined,
+      name: editingCampaign?.name || "",
+      message: editingCampaign?.message || "",
+      delayMin: editingCampaign?.delayMin || 6,
+      delayMax: editingCampaign?.delayMax || 12,
+      batchSize: editingCampaign?.batchSize || 10,
+      batchDelay: editingCampaign?.batchDelay || 1,
+      scheduledAt: editingCampaign?.scheduledAt || "",
+      contactListId: editingCampaign?.contactListId || undefined,
     },
   });
 
@@ -95,7 +104,8 @@ export default function CampaignForm() {
       });
 
       if (!response.ok) {
-        throw new Error("Upload failed");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Upload failed");
       }
 
       return response.json();
@@ -127,30 +137,46 @@ export default function CampaignForm() {
       formData.append("batchSize", data.batchSize.toString());
       formData.append("batchDelay", data.batchDelay.toString());
 
+      if (executionType === "scheduled" && data.scheduledAt) {
+        formData.append("scheduledAt", data.scheduledAt);
+      }
+
       if (imageFile) {
         formData.append("image", imageFile);
       }
 
-      const response = await fetch("/api/campaigns", {
-        method: "POST",
+      const url = editingCampaign ? `/api/campaigns/${editingCampaign.id}` : "/api/campaigns";
+      const method = editingCampaign ? "PUT" : "POST";
+      
+      const response = await fetch(url, {
+        method,
         body: formData,
         credentials: "include",
       });
 
       if (!response.ok) {
-        throw new Error("Campaign creation failed");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Campaign operation failed");
       }
 
       return response.json();
     },
     onSuccess: (campaign) => {
-      setCreatedCampaign(campaign);
-      setStep("contacts");
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
-      toast({
-        title: "Campanha criada",
-        description: "Campanha criada com sucesso",
-      });
+      if (editingCampaign) {
+        toast({
+          title: "Campanha atualizada",
+          description: "Campanha editada com sucesso!",
+        });
+        onComplete?.();
+      } else {
+        setCreatedCampaign(campaign);
+        setStep("contacts");
+        toast({
+          title: "Campanha criada",
+          description: "Campanha criada com sucesso",
+        });
+      }
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
@@ -382,6 +408,50 @@ export default function CampaignForm() {
                 />
               </div>
 
+              <div>
+                <FormLabel>Execução da Campanha</FormLabel>
+                <RadioGroup 
+                  value={executionType} 
+                  onValueChange={(value) => setExecutionType(value as "now" | "scheduled")}
+                  className="mt-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="now" id="now" />
+                    <Label htmlFor="now" className="flex items-center gap-2">
+                      <Play className="w-4 h-4" />
+                      Executar agora
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="scheduled" id="scheduled" />
+                    <Label htmlFor="scheduled" className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Agendar para data/hora específica
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {executionType === "scheduled" && (
+                <FormField
+                  control={form.control}
+                  name="scheduledAt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data e Hora do Agendamento</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          {...field}
+                          min={new Date().toISOString().slice(0, 16)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -472,8 +542,8 @@ export default function CampaignForm() {
                 disabled={createCampaignMutation.isPending}
               >
                 {createCampaignMutation.isPending
-                  ? "Criando..."
-                  : "Criar Campanha"}
+                  ? editingCampaign ? "Salvando..." : "Criando..."
+                  : editingCampaign ? "Salvar Alterações" : "Criar Campanha"}
               </Button>
             </form>
           </Form>

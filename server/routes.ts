@@ -75,6 +75,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // All routes below this point require authentication
 
+  // Contact Lists routes
+  app.post('/api/contact-lists', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { name, description, color } = req.body;
+      
+      const contactList = await storage.createContactList({
+        userId,
+        name,
+        description,
+        color,
+      });
+      
+      res.json(contactList);
+    } catch (error) {
+      console.error("Error creating contact list:", error);
+      res.status(500).json({ message: "Failed to create contact list" });
+    }
+  });
+
+  app.get('/api/contact-lists', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const contactLists = await storage.getContactLists(userId);
+      res.json(contactLists);
+    } catch (error) {
+      console.error("Error fetching contact lists:", error);
+      res.status(500).json({ message: "Failed to fetch contact lists" });
+    }
+  });
+
+  app.put('/api/contact-lists/:id', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const listId = parseInt(req.params.id);
+      const updates = req.body;
+      
+      const contactList = await storage.updateContactList(listId, updates);
+      res.json(contactList);
+    } catch (error) {
+      console.error("Error updating contact list:", error);
+      res.status(500).json({ message: "Failed to update contact list" });
+    }
+  });
+
+  app.delete('/api/contact-lists/:id', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const listId = parseInt(req.params.id);
+      
+      const success = await storage.deleteContactList(listId, userId);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Contact list not found" });
+      }
+      
+      res.json({ message: "Contact list deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting contact list:", error);
+      res.status(500).json({ message: "Failed to delete contact list" });
+    }
+  });
+
   // Campaign routes
   app.get('/api/campaigns', requireAuth, async (req: any, res) => {
     try {
@@ -156,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/campaigns/:id', requireAuth, async (req: any, res) => {
+  app.put('/api/campaigns/:id', requireAuth, upload.single('image'), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const campaignId = parseInt(req.params.id);
@@ -167,7 +230,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
       
-      const campaign = await storage.updateCampaign(campaignId, req.body);
+      // Handle image upload
+      let imageUrl = existing.imageUrl; // Keep existing image if no new one
+      if (req.file) {
+        imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+      
+      // Parse scheduled date if provided
+      let scheduledAt = existing.scheduledAt;
+      if (req.body.scheduledAt) {
+        scheduledAt = new Date(req.body.scheduledAt);
+      }
+      
+      const updates = {
+        name: req.body.name,
+        message: req.body.message,
+        imageUrl,
+        delayMin: parseInt(req.body.delayMin) || existing.delayMin,
+        delayMax: parseInt(req.body.delayMax) || existing.delayMax,
+        batchSize: parseInt(req.body.batchSize) || existing.batchSize,
+        batchDelay: parseInt(req.body.batchDelay) || existing.batchDelay,
+        contactListId: req.body.contactListId ? parseInt(req.body.contactListId) : existing.contactListId,
+        scheduledAt,
+      };
+      
+      const campaign = await storage.updateCampaign(campaignId, updates);
       res.json(campaign);
     } catch (error) {
       console.error("Error updating campaign:", error);
