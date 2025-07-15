@@ -35,7 +35,9 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   isAdmin: boolean("is_admin").default(false),
   subscriptionStatus: varchar("subscription_status").default("trial"),
-  trialEndsAt: timestamp("trial_ends_at"),
+  trialEndsAt: timestamp("trial_ends_at").defaultNow(),
+  campaignCount: integer("campaign_count").default(0),
+  contactCount: integer("contact_count").default(0),
   mercadopagoSubscriptionId: varchar("mercadopago_subscription_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -48,7 +50,7 @@ export const campaigns = pgTable("campaigns", {
   name: varchar("name").notNull(),
   message: text("message").notNull(),
   imageUrl: varchar("image_url"),
-  status: varchar("status").default("draft"), // draft, sending, completed, failed
+  status: varchar("status").default("draft"), // draft, scheduled, sending, completed, failed
   totalContacts: integer("total_contacts").default(0),
   sentCount: integer("sent_count").default(0),
   failedCount: integer("failed_count").default(0),
@@ -56,6 +58,19 @@ export const campaigns = pgTable("campaigns", {
   delayMax: integer("delay_max").default(12),
   batchSize: integer("batch_size").default(10),
   batchDelay: integer("batch_delay").default(60),
+  scheduledAt: timestamp("scheduled_at"),
+  contactListId: integer("contact_list_id").references(() => contactLists.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Contact lists table
+export const contactLists = pgTable("contact_lists", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  name: varchar("name").notNull(),
+  description: varchar("description"),
+  color: varchar("color").default("#3b82f6"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -65,6 +80,7 @@ export const contacts = pgTable("contacts", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().references(() => users.id),
   campaignId: integer("campaign_id").references(() => campaigns.id),
+  contactListId: integer("contact_list_id").references(() => contactLists.id),
   name: varchar("name").notNull(),
   phone: varchar("phone").notNull(),
   email: varchar("email"),
@@ -102,6 +118,7 @@ export const whatsappSessions = pgTable("whatsapp_sessions", {
 export const usersRelations = relations(users, ({ many }) => ({
   campaigns: many(campaigns),
   contacts: many(contacts),
+  contactLists: many(contactLists),
   whatsappSessions: many(whatsappSessions),
 }));
 
@@ -110,8 +127,21 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
     fields: [campaigns.userId],
     references: [users.id],
   }),
+  contactList: one(contactLists, {
+    fields: [campaigns.contactListId],
+    references: [contactLists.id],
+  }),
   contacts: many(contacts),
   logs: many(campaignLogs),
+}));
+
+export const contactListsRelations = relations(contactLists, ({ one, many }) => ({
+  user: one(users, {
+    fields: [contactLists.userId],
+    references: [users.id],
+  }),
+  contacts: many(contacts),
+  campaigns: many(campaigns),
 }));
 
 export const contactsRelations = relations(contacts, ({ one }) => ({
@@ -122,6 +152,10 @@ export const contactsRelations = relations(contacts, ({ one }) => ({
   campaign: one(campaigns, {
     fields: [contacts.campaignId],
     references: [campaigns.id],
+  }),
+  contactList: one(contactLists, {
+    fields: [contacts.contactListId],
+    references: [contactLists.id],
   }),
 }));
 
@@ -163,6 +197,11 @@ export const insertWhatsappSessionSchema = createInsertSchema(whatsappSessions).
   createdAt: true,
   updatedAt: true,
 });
+export const insertContactListSchema = createInsertSchema(contactLists).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema>;
@@ -175,3 +214,5 @@ export type InsertCampaignLog = z.infer<typeof insertCampaignLogSchema>;
 export type CampaignLog = typeof campaignLogs.$inferSelect;
 export type InsertWhatsappSession = z.infer<typeof insertWhatsappSessionSchema>;
 export type WhatsappSession = typeof whatsappSessions.$inferSelect;
+export type InsertContactList = z.infer<typeof insertContactListSchema>;
+export type ContactList = typeof contactLists.$inferSelect;

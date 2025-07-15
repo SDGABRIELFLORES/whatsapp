@@ -91,10 +91,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuário não encontrado" });
+      }
+
+      // Check trial limitations
+      if (user.subscriptionStatus === "trial") {
+        const userCampaigns = await storage.getCampaigns(userId);
+        if (userCampaigns.length >= 1) {
+          return res.status(403).json({ 
+            message: "Usuários em teste podem criar apenas 1 campanha. Assine um plano para criar mais." 
+          });
+        }
+      }
+      
       let imageUrl = null;
       if (req.file) {
         // Para simplificar, vamos salvar como base64 ou podemos implementar storage de arquivos
         imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+      
+      // Parse scheduled date if provided
+      let scheduledAt = null;
+      if (req.body.scheduledAt) {
+        scheduledAt = new Date(req.body.scheduledAt);
       }
       
       const campaignData = insertCampaignSchema.parse({
@@ -105,6 +126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         delayMax: parseInt(req.body.delayMax) || 12,
         batchSize: parseInt(req.body.batchSize) || 10,
         batchDelay: parseInt(req.body.batchDelay) || 1,
+        contactListId: req.body.contactListId ? parseInt(req.body.contactListId) : null,
+        scheduledAt,
         userId
       });
       
@@ -180,6 +203,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
       
+      // Get user to check subscription status
+      const user = await storage.getUser(userId);
+      
       const excelContacts = excelService.parseExcelFile(req.file.buffer);
       const { valid, invalid } = excelService.validateContacts(excelContacts);
       
@@ -188,6 +214,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "No valid contacts found",
           invalid: invalid.length 
         });
+      }
+      
+      // Check trial limitations
+      if (user?.subscriptionStatus !== 'active') {
+        if (valid.length > 20) {
+          return res.status(400).json({ 
+            message: "Limite de teste atingido. Usuários em teste podem importar apenas 20 contatos por vez. Assine para contatos ilimitados." 
+          });
+        }
+        
+        // Check total contacts limit
+        const existingContacts = await storage.getContacts(userId);
+        if (existingContacts.length + valid.length > 20) {
+          return res.status(400).json({ 
+            message: `Limite de teste atingido. Você pode ter no máximo 20 contatos. Atualmente você tem ${existingContacts.length} contatos.` 
+          });
+        }
       }
       
       const contacts = excelService.convertToContacts(valid, userId, campaignId);
@@ -461,6 +504,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  // Contact List routes
+  app.get('/api/contact-lists', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const contactLists = await storage.getContactLists(userId);
+      res.json(contactLists);
+    } catch (error) {
+      console.error("Error fetching contact lists:", error);
+      res.status(500).json({ message: "Erro ao buscar listas de contatos" });
+    }
+  });
+
+  app.post('/api/contact-lists', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { name, description, color } = req.body;
+      
+      const contactList = await storage.createContactList({
+        name,
+        description,
+        color,
+        userId
+      });
+      
+      res.json(contactList);
+    } catch (error) {
+      console.error("Error creating contact list:", error);
+      res.status(500).json({ message: "Erro ao criar lista de contatos" });
+    }
+  });
+
+  app.delete('/api/contact-lists/:id', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const listId = parseInt(req.params.id);
+      
+      const success = await storage.deleteContactList(listId, userId);
+      
+      if (success) {
+        res.json({ message: "Lista excluída com sucesso" });
+      } else {
+        res.status(404).json({ message: "Lista não encontrada" });
+      }
+    } catch (error) {
+      console.error("Error deleting contact list:", error);
+      res.status(500).json({ message: "Erro ao excluir lista" });
     }
   });
 

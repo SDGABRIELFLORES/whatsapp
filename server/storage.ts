@@ -4,6 +4,7 @@ import {
   contacts,
   campaignLogs,
   whatsappSessions,
+  contactLists,
   type User,
   type UpsertUser,
   type Campaign,
@@ -14,6 +15,8 @@ import {
   type InsertCampaignLog,
   type WhatsappSession,
   type InsertWhatsappSession,
+  type ContactList,
+  type InsertContactList,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, count, sum } from "drizzle-orm";
@@ -58,6 +61,13 @@ export interface IStorage {
     userId: string,
     updates: Partial<WhatsappSession>,
   ): Promise<WhatsappSession>;
+
+  // Contact List operations
+  createContactList(contactList: InsertContactList): Promise<ContactList>;
+  getContactLists(userId: string): Promise<ContactList[]>;
+  getContactList(id: number, userId: string): Promise<ContactList | undefined>;
+  updateContactList(id: number, updates: Partial<ContactList>): Promise<ContactList>;
+  deleteContactList(id: number, userId: string): Promise<boolean>;
 
   // Admin operations
   getAllUsers(): Promise<User[]>;
@@ -146,6 +156,15 @@ export class DatabaseStorage implements IStorage {
       .insert(campaigns)
       .values(campaign)
       .returning();
+    
+    // Update user campaign count
+    await db
+      .update(users)
+      .set({ 
+        campaignCount: count(campaigns.id)
+      })
+      .where(eq(users.id, campaign.userId));
+    
     return newCampaign;
   }
 
@@ -333,6 +352,44 @@ export class DatabaseStorage implements IStorage {
       totalCampaigns: totalCampaignsResult.count,
       totalMessages: Number(totalMessagesResult.total || 0),
     };
+  }
+
+  // Contact List operations
+  async createContactList(contactList: InsertContactList): Promise<ContactList> {
+    const [newList] = await db.insert(contactLists).values(contactList).returning();
+    return newList;
+  }
+
+  async getContactLists(userId: string): Promise<ContactList[]> {
+    return await db
+      .select()
+      .from(contactLists)
+      .where(eq(contactLists.userId, userId))
+      .orderBy(desc(contactLists.createdAt));
+  }
+
+  async getContactList(id: number, userId: string): Promise<ContactList | undefined> {
+    const [contactList] = await db
+      .select()
+      .from(contactLists)
+      .where(and(eq(contactLists.id, id), eq(contactLists.userId, userId)));
+    return contactList;
+  }
+
+  async updateContactList(id: number, updates: Partial<ContactList>): Promise<ContactList> {
+    const [contactList] = await db
+      .update(contactLists)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contactLists.id, id))
+      .returning();
+    return contactList;
+  }
+
+  async deleteContactList(id: number, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(contactLists)
+      .where(and(eq(contactLists.id, id), eq(contactLists.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   }
 }
 

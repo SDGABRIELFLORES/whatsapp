@@ -20,6 +20,7 @@ import {
 import CampaignForm from "@/components/campaign-form";
 import QRModal from "@/components/qr-modal";
 import StatsCard from "@/components/stats-card";
+import FeatureShowcase from "@/components/feature-showcase";
 import Header from "@/components/header";
 import Profile from "@/pages/profile";
 import Subscribe from "@/pages/subscribe";
@@ -152,9 +153,10 @@ export default function Dashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="campaigns">Campanhas</TabsTrigger>
+            <TabsTrigger value="features">Funcionalidades</TabsTrigger>
             <TabsTrigger value="contacts">Contatos</TabsTrigger>
           </TabsList>
 
@@ -359,6 +361,10 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="features" className="space-y-6">
+            <FeatureShowcase />
           </TabsContent>
 
           <TabsContent value="contacts" className="space-y-6">

@@ -51,11 +51,17 @@ export default function Header({
         </Badge>
       );
     }
+    
+    // Calculate days left in trial
+    const trialEndsAt = user?.trialEndsAt ? new Date(user.trialEndsAt) : null;
+    const now = new Date();
+    const daysLeft = trialEndsAt ? Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 7;
+    
     return (
       <div className="flex items-center gap-2">
         <Badge className="bg-orange-100 text-orange-800">
           <CreditCard className="w-3 h-3 mr-1" />
-          Teste
+          Teste até: {daysLeft} dia{daysLeft !== 1 ? 's' : ''}
         </Badge>
         <Button 
           size="sm" 

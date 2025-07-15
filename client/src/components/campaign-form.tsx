@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,16 +21,31 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import FileUpload from "@/components/ui/file-upload";
 import ImageUpload from "@/components/image-upload";
-import { Upload, Users, Send, Clock } from "lucide-react";
+import { Upload, Users, Send, Clock, UserRound, Filter, Calendar, List } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const campaignSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   message: z.string().min(1, "Mensagem é obrigatória"),
-  delayMin: z.number().min(1, "Delay mínimo deve ser pelo menos 1 segundo").default(6),
-  delayMax: z.number().min(1, "Delay máximo deve ser pelo menos 1 segundo").default(12),
-  batchSize: z.number().min(1, "Tamanho do lote deve ser pelo menos 1").default(10),
-  batchDelay: z.number().min(1, "Pausa entre lotes deve ser pelo menos 1 minuto").default(1),
+  delayMin: z
+    .number()
+    .min(1, "Delay mínimo deve ser pelo menos 1 segundo")
+    .default(6),
+  delayMax: z
+    .number()
+    .min(1, "Delay máximo deve ser pelo menos 1 segundo")
+    .default(12),
+  batchSize: z
+    .number()
+    .min(1, "Tamanho do lote deve ser pelo menos 1")
+    .default(10),
+  batchDelay: z
+    .number()
+    .min(1, "Pausa entre lotes deve ser pelo menos 1 minuto")
+    .default(1),
+  scheduledAt: z.string().optional(),
+  contactListId: z.number().optional(),
 });
 
 type CampaignFormData = z.infer<typeof campaignSchema>;
@@ -34,8 +56,11 @@ export default function CampaignForm() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [selectedContacts, setSelectedContacts] = useState<number[]>([]);
-  const [step, setStep] = useState<'form' | 'contacts' | 'send'>('form');
+  const [step, setStep] = useState<"form" | "contacts" | "send">("form");
   const [createdCampaign, setCreatedCampaign] = useState<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [daysFilter, setDaysFilter] = useState<number>(7);
+  const [isFiltered, setIsFiltered] = useState<boolean>(false);
 
   const form = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchema),
@@ -46,13 +71,15 @@ export default function CampaignForm() {
       delayMax: 12,
       batchSize: 10,
       batchDelay: 1,
+      scheduledAt: "",
+      contactListId: undefined,
     },
   });
 
   // Get user's contacts
   const { data: contacts = [], isLoading: contactsLoading } = useQuery({
     queryKey: ["/api/contacts"],
-    enabled: step === 'contacts',
+    enabled: step === "contacts",
   });
 
   // Upload contacts from Excel
@@ -60,17 +87,17 @@ export default function CampaignForm() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      
+
       const response = await fetch("/api/contacts/upload", {
         method: "POST",
         body: formData,
         credentials: "include",
       });
-      
+
       if (!response.ok) {
         throw new Error("Upload failed");
       }
-      
+
       return response.json();
     },
     onSuccess: (data) => {
@@ -99,26 +126,26 @@ export default function CampaignForm() {
       formData.append("delayMax", data.delayMax.toString());
       formData.append("batchSize", data.batchSize.toString());
       formData.append("batchDelay", data.batchDelay.toString());
-      
+
       if (imageFile) {
         formData.append("image", imageFile);
       }
-      
+
       const response = await fetch("/api/campaigns", {
         method: "POST",
         body: formData,
         credentials: "include",
       });
-      
+
       if (!response.ok) {
         throw new Error("Campaign creation failed");
       }
-      
+
       return response.json();
     },
     onSuccess: (campaign) => {
       setCreatedCampaign(campaign);
-      setStep('contacts');
+      setStep("contacts");
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
       toast({
         title: "Campanha criada",
@@ -148,9 +175,13 @@ export default function CampaignForm() {
   // Send campaign mutation
   const sendCampaignMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/campaigns/${createdCampaign.id}/send`, {
-        contactIds: selectedContacts
-      });
+      const response = await apiRequest(
+        "POST",
+        `/api/campaigns/${createdCampaign.id}/send`,
+        {
+          contactIds: selectedContacts,
+        },
+      );
       return response.json();
     },
     onSuccess: (data) => {
@@ -160,7 +191,7 @@ export default function CampaignForm() {
         description: `${data.sent} mensagens enviadas com sucesso`,
       });
       // Reset form
-      setStep('form');
+      setStep("form");
       setCreatedCampaign(null);
       setSelectedContacts([]);
       setImageFile(null);
@@ -192,15 +223,24 @@ export default function CampaignForm() {
 
   const handleContactSelection = (contactId: number, checked: boolean) => {
     if (checked) {
-      setSelectedContacts(prev => [...prev, contactId]);
+      setSelectedContacts((prev) => [...prev, contactId]);
     } else {
-      setSelectedContacts(prev => prev.filter(id => id !== contactId));
+      setSelectedContacts((prev) => prev.filter((id) => id !== contactId));
     }
   };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedContacts(contacts.map((contact: any) => contact.id));
+      if (isFiltered) {
+        // Se filtrado, selecione apenas os contatos filtrados
+        const filteredIds = filterContactsByLastSent(contacts, daysFilter).map(
+          (contact: any) => contact.id,
+        );
+        setSelectedContacts(filteredIds);
+      } else {
+        // Caso contrário, selecione todos os contatos
+        setSelectedContacts(contacts.map((contact: any) => contact.id));
+      }
     } else {
       setSelectedContacts([]);
     }
@@ -213,7 +253,62 @@ export default function CampaignForm() {
     setSelectedFile(file);
   };
 
-  if (step === 'form') {
+  const insertNameVariable = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentValue = form.getValues("message");
+    const newValue =
+      currentValue.substring(0, start) + "[nome]" + currentValue.substring(end);
+
+    form.setValue("message", newValue);
+
+    // Reposiciona o cursor após a variável inserida
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + 6, start + 6);
+    }, 0);
+  };
+
+  // Função para filtrar contatos que não receberam mensagens nos últimos X dias
+  const filterContactsByLastSent = (contacts: any[], days: number) => {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    return contacts.filter((contact: any) => {
+      // Se nunca recebeu mensagem, incluir
+      if (!contact.lastCampaignSent) return true;
+
+      // Se recebeu, verificar se foi antes da data de corte
+      const lastSentDate = new Date(contact.lastCampaignSent);
+      return lastSentDate < cutoffDate;
+    });
+  };
+
+  // Aplicar filtro por dias
+  const applyDaysFilter = () => {
+    const filteredContacts = filterContactsByLastSent(contacts, daysFilter);
+    setIsFiltered(true);
+    // Limpa a seleção atual
+    setSelectedContacts([]);
+    // Opcional: selecionar automaticamente todos os contatos filtrados
+    setSelectedContacts(filteredContacts.map((contact: any) => contact.id));
+
+    toast({
+      title: "Filtro aplicado",
+      description: `${filteredContacts.length} contatos não receberam mensagens nos últimos ${daysFilter} dias`,
+    });
+  };
+
+  // Remover filtro
+  const clearFilter = () => {
+    setIsFiltered(false);
+    setSelectedContacts([]);
+  };
+
+  if (step === "form") {
     return (
       <Card>
         <CardHeader>
@@ -232,7 +327,10 @@ export default function CampaignForm() {
                   <FormItem>
                     <FormLabel>Nome da Campanha</FormLabel>
                     <FormControl>
-                      <Input placeholder="Digite o nome da campanha" {...field} />
+                      <Input
+                        placeholder="Digite o nome da campanha"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -245,13 +343,29 @@ export default function CampaignForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Mensagem</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Digite sua mensagem aqui. Use [nome] para personalizar com o nome do contato."
-                        rows={4}
-                        {...field}
-                      />
-                    </FormControl>
+                    <div className="space-y-2">
+                      <FormControl>
+                        <Textarea
+                          placeholder="Digite sua mensagem aqui. Use [nome] para personalizar com o nome do contato."
+                          rows={4}
+                          {...field}
+                          ref={(e) => {
+                            field.ref(e);
+                            textareaRef.current = e;
+                          }}
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={insertNameVariable}
+                        className="flex items-center gap-1"
+                      >
+                        <UserRound size={14} />
+                        Inserir [nome]
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -262,7 +376,9 @@ export default function CampaignForm() {
                 <ImageUpload
                   onImageUpload={setImageFile}
                   onImageRemove={() => setImageFile(null)}
-                  imageUrl={imageFile ? URL.createObjectURL(imageFile) : undefined}
+                  imageUrl={
+                    imageFile ? URL.createObjectURL(imageFile) : undefined
+                  }
                 />
               </div>
 
@@ -274,10 +390,12 @@ export default function CampaignForm() {
                     <FormItem>
                       <FormLabel>Delay Mínimo (seg)</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value))
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -292,10 +410,12 @@ export default function CampaignForm() {
                     <FormItem>
                       <FormLabel>Delay Máximo (seg)</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value))
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -312,10 +432,12 @@ export default function CampaignForm() {
                     <FormItem>
                       <FormLabel>Tamanho do Lote</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value))
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -330,10 +452,12 @@ export default function CampaignForm() {
                     <FormItem>
                       <FormLabel>Pausa entre Lotes (min)</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value))
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -342,12 +466,14 @@ export default function CampaignForm() {
                 />
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full"
                 disabled={createCampaignMutation.isPending}
               >
-                {createCampaignMutation.isPending ? "Criando..." : "Criar Campanha"}
+                {createCampaignMutation.isPending
+                  ? "Criando..."
+                  : "Criar Campanha"}
               </Button>
             </form>
           </Form>
@@ -356,7 +482,12 @@ export default function CampaignForm() {
     );
   }
 
-  if (step === 'contacts') {
+  if (step === "contacts") {
+    // Determinar quais contatos exibir com base no filtro
+    const displayedContacts = isFiltered
+      ? filterContactsByLastSent(contacts, daysFilter)
+      : contacts;
+
     return (
       <Card>
         <CardHeader>
@@ -369,27 +500,84 @@ export default function CampaignForm() {
           <div className="space-y-4">
             {contacts.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-4">Você ainda não tem contatos cadastrados.</p>
+                <p className="text-gray-500 mb-4">
+                  Você ainda não tem contatos cadastrados.
+                </p>
                 <FileUpload
                   accept=".xlsx,.xls,.csv"
                   onFileSelect={handleFileUpload}
                   selectedFile={selectedFile}
                 />
                 {uploadContactsMutation.isPending && (
-                  <p className="text-sm text-gray-500 mt-2">Carregando contatos...</p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Carregando contatos...
+                  </p>
                 )}
               </div>
             )}
 
             {contacts.length > 0 && (
               <>
+                {/* Filtro por dias desde último envio */}
+                <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                  <h3 className="font-medium mb-2 flex items-center gap-1">
+                    <Filter className="h-4 w-4" />
+                    Filtrar contatos
+                  </h3>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <FormLabel className="text-sm">
+                        Enviar apenas para contatos que não receberam nos
+                        últimos:
+                      </FormLabel>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          value={daysFilter}
+                          onChange={(e) =>
+                            setDaysFilter(Number(e.target.value))
+                          }
+                          className="w-24"
+                          min="1"
+                        />
+                        <span>dias</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearFilter}
+                        disabled={!isFiltered}
+                      >
+                        Limpar
+                      </Button>
+                      <Button size="sm" onClick={applyDaysFilter}>
+                        Aplicar
+                      </Button>
+                    </div>
+                  </div>
+                  {isFiltered && (
+                    <p className="text-xs text-green-700 mt-2">
+                      Mostrando {displayedContacts.length} de {contacts.length}{" "}
+                      contatos que não receberam mensagens nos últimos{" "}
+                      {daysFilter} dias.
+                    </p>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Checkbox
-                      checked={selectedContacts.length === contacts.length}
+                      checked={
+                        selectedContacts.length === displayedContacts.length &&
+                        displayedContacts.length > 0
+                      }
                       onCheckedChange={handleSelectAll}
                     />
-                    <span>Selecionar todos ({contacts.length} contatos)</span>
+                    <span>
+                      Selecionar todos ({displayedContacts.length} contatos)
+                    </span>
                   </div>
                   <Badge variant="secondary">
                     {selectedContacts.length} selecionados
@@ -397,18 +585,26 @@ export default function CampaignForm() {
                 </div>
 
                 <div className="max-h-64 overflow-y-auto space-y-2">
-                  {contacts.map((contact: any) => (
-                    <div key={contact.id} className="flex items-center gap-2 p-2 border rounded">
+                  {displayedContacts.map((contact: any) => (
+                    <div
+                      key={contact.id}
+                      className="flex items-center gap-2 p-2 border rounded"
+                    >
                       <Checkbox
                         checked={selectedContacts.includes(contact.id)}
-                        onCheckedChange={(checked) => handleContactSelection(contact.id, checked)}
+                        onCheckedChange={(checked) =>
+                          handleContactSelection(contact.id, checked)
+                        }
                       />
                       <div className="flex-1">
                         <p className="font-medium">{contact.name}</p>
                         <p className="text-sm text-gray-500">{contact.phone}</p>
                         {contact.lastCampaignSent && (
                           <p className="text-xs text-gray-400">
-                            Último envio: {new Date(contact.lastCampaignSent).toLocaleDateString()}
+                            Último envio:{" "}
+                            {new Date(
+                              contact.lastCampaignSent,
+                            ).toLocaleDateString()}
                           </p>
                         )}
                       </div>
@@ -417,15 +613,15 @@ export default function CampaignForm() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button 
+                  <Button
                     variant="outline"
-                    onClick={() => setStep('form')}
+                    onClick={() => setStep("form")}
                     className="flex-1"
                   >
                     Voltar
                   </Button>
-                  <Button 
-                    onClick={() => setStep('send')}
+                  <Button
+                    onClick={() => setStep("send")}
                     disabled={selectedContacts.length === 0}
                     className="flex-1"
                   >
@@ -440,7 +636,7 @@ export default function CampaignForm() {
     );
   }
 
-  if (step === 'send') {
+  if (step === "send") {
     return (
       <Card>
         <CardHeader>
@@ -453,34 +649,53 @@ export default function CampaignForm() {
           <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-medium mb-2">Resumo da Campanha</h3>
-              <p><strong>Nome:</strong> {createdCampaign?.name}</p>
-              <p><strong>Contatos selecionados:</strong> {selectedContacts.length}</p>
-              <p><strong>Delay:</strong> {form.getValues('delayMin')} - {form.getValues('delayMax')} segundos</p>
-              <p><strong>Lote:</strong> {form.getValues('batchSize')} mensagens por lote</p>
-              <p><strong>Pausa entre lotes:</strong> {form.getValues('batchDelay')} minutos</p>
+              <p>
+                <strong>Nome:</strong> {createdCampaign?.name}
+              </p>
+              <p>
+                <strong>Contatos selecionados:</strong>{" "}
+                {selectedContacts.length}
+              </p>
+              <p>
+                <strong>Delay:</strong> {form.getValues("delayMin")} -{" "}
+                {form.getValues("delayMax")} segundos
+              </p>
+              <p>
+                <strong>Lote:</strong> {form.getValues("batchSize")} mensagens
+                por lote
+              </p>
+              <p>
+                <strong>Pausa entre lotes:</strong>{" "}
+                {form.getValues("batchDelay")} minutos
+              </p>
             </div>
 
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-sm text-blue-800">
                 <Clock className="w-4 h-4 inline mr-1" />
-                Tempo estimado: {Math.ceil((selectedContacts.length * 8) / 60)} minutos
+                Tempo estimado: {Math.ceil(
+                  (selectedContacts.length * 8) / 60,
+                )}{" "}
+                minutos
               </p>
             </div>
 
             <div className="flex gap-2">
-              <Button 
+              <Button
                 variant="outline"
-                onClick={() => setStep('contacts')}
+                onClick={() => setStep("contacts")}
                 className="flex-1"
               >
                 Voltar
               </Button>
-              <Button 
+              <Button
                 onClick={() => sendCampaignMutation.mutate()}
                 disabled={sendCampaignMutation.isPending}
                 className="flex-1"
               >
-                {sendCampaignMutation.isPending ? "Enviando..." : "Enviar Campanha"}
+                {sendCampaignMutation.isPending
+                  ? "Enviando..."
+                  : "Enviar Campanha"}
               </Button>
             </div>
           </div>

@@ -32,7 +32,7 @@ async function comparePasswords(supplied: string, stored: string) {
 
 export function setupAuth(app: Express) {
   const PostgresSessionStore = connectPg(session);
-  
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "dev-secret-key",
     resave: false,
@@ -65,18 +65,18 @@ export function setupAuth(app: Express) {
           if (!user || !user.password) {
             return done(null, false);
           }
-          
+
           const isValid = await comparePasswords(password, user.password);
           if (!isValid) {
             return done(null, false);
           }
-          
+
           return done(null, user);
         } catch (error) {
           return done(error);
         }
-      }
-    )
+      },
+    ),
   );
 
   passport.serializeUser((user, done) => done(null, user.id));
@@ -91,10 +91,12 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const { email, password, name } = req.body;
-      
-      if (!email || !password || !name) {
-        return res.status(400).json({ message: "Todos os campos são obrigatórios" });
+      const { email, password, firstName, lastName } = req.body;
+
+      if (!email || !password || !firstName) {
+        return res
+          .status(400)
+          .json({ message: "Todos os campos são obrigatórios" });
       }
 
       const existingUser = await storage.getUserByEmail(email);
@@ -107,14 +109,19 @@ export function setupAuth(app: Express) {
         id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         email,
         password: hashedPassword,
-        firstName: name,
+        firstName,
+        lastName: lastName || "",
         subscriptionStatus: "trial",
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
       });
 
+      // Create a copy of the user object without the password
+      const userWithoutPassword = { ...user };
+      delete userWithoutPassword.password;
+
       req.login(user, (err) => {
         if (err) return next(err);
-        res.status(201).json(user);
+        res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
       console.error("Registration error:", error);
@@ -134,7 +141,10 @@ export function setupAuth(app: Express) {
         if (err) {
           return next(err);
         }
-        res.json(user);
+        // Remove password from the response
+        const userWithoutPassword = { ...user };
+        delete userWithoutPassword.password;
+        res.json(userWithoutPassword);
       });
     })(req, res, next);
   });
@@ -150,7 +160,10 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Não autenticado" });
     }
-    res.json(req.user);
+    // Remove password from the response
+    const userWithoutPassword = { ...req.user };
+    delete userWithoutPassword.password;
+    res.json(userWithoutPassword);
   });
 }
 
