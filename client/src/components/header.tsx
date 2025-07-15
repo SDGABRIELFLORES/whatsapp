@@ -52,10 +52,19 @@ export default function Header({
       );
     }
     return (
-      <Badge className="bg-orange-100 text-orange-800">
-        <CreditCard className="w-3 h-3 mr-1" />
-        Teste
-      </Badge>
+      <div className="flex items-center gap-2">
+        <Badge className="bg-orange-100 text-orange-800">
+          <CreditCard className="w-3 h-3 mr-1" />
+          Teste
+        </Badge>
+        <Button 
+          size="sm" 
+          onClick={onSubscriptionClick}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          Assinar Agora
+        </Button>
+      </div>
     );
   };
 
