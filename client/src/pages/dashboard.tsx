@@ -1,300 +1,358 @@
-import { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, NotebookPen, CheckCircle, Megaphone, Users, Bell, Crown, Wifi, WifiOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedError } from "@/lib/authUtils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  MessageSquare, 
+  Users, 
+  Send, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  Smartphone,
+  Plus,
+  BarChart3,
+  AlertCircle,
+  Zap
+} from "lucide-react";
 import CampaignForm from "@/components/campaign-form";
-import StatsCard from "@/components/stats-card";
 import QRModal from "@/components/qr-modal";
+import StatsCard from "@/components/stats-card";
 
 export default function Dashboard() {
-  const { user, isLoading } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("overview");
   const [showQRModal, setShowQRModal] = useState(false);
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isLoading && !user) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
-    }
-  }, [user, isLoading, toast]);
+  const [showCampaignForm, setShowCampaignForm] = useState(false);
 
   // Fetch campaigns
   const { data: campaigns = [], isLoading: campaignsLoading } = useQuery({
     queryKey: ["/api/campaigns"],
-    enabled: !!user,
   });
 
-  // Fetch WhatsApp status
+  // Fetch contacts
+  const { data: contacts = [], isLoading: contactsLoading } = useQuery({
+    queryKey: ["/api/contacts"],
+  });
+
+  // Check WhatsApp status
   const { data: whatsappStatus, isLoading: statusLoading } = useQuery({
     queryKey: ["/api/whatsapp/status"],
-    enabled: !!user,
-    refetchInterval: 5000, // Check every 5 seconds
+    refetchInterval: 5000,
   });
 
-  // Disconnect WhatsApp mutation
-  const disconnectMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/whatsapp/disconnect");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
-      toast({
-        title: "Desconectado",
-        description: "WhatsApp desconectado com sucesso",
-      });
-    },
-    onError: (error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-      toast({
-        title: "Erro",
-        description: "Erro ao desconectar WhatsApp",
-        variant: "destructive",
-      });
-    },
-  });
+  // Calculate stats
+  const totalCampaigns = campaigns.length;
+  const totalContacts = contacts.length;
+  const totalSent = campaigns.reduce((sum: number, campaign: any) => sum + (campaign.sentCount || 0), 0);
+  const totalFailed = campaigns.reduce((sum: number, campaign: any) => sum + (campaign.failedCount || 0), 0);
 
-  if (isLoading || !user) {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-100 text-green-800";
+      case "sending":
+        return "bg-blue-100 text-blue-800";
+      case "failed":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "Concluída";
+      case "sending":
+        return "Enviando";
+      case "failed":
+        return "Falhou";
+      default:
+        return "Rascunho";
+    }
+  };
+
+  if (showCampaignForm) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Nova Campanha</h1>
+          <Button variant="outline" onClick={() => setShowCampaignForm(false)}>
+            Voltar
+          </Button>
+        </div>
+        <CampaignForm />
       </div>
     );
   }
 
-  const isConnected = whatsappStatus?.isConnected || false;
-  const totalMessages = campaigns.reduce((sum: number, campaign: any) => sum + (campaign.sentCount || 0), 0);
-  const activeCampaigns = campaigns.filter((campaign: any) => campaign.status === "sending").length;
-  const totalContacts = campaigns.reduce((sum: number, campaign: any) => sum + (campaign.totalContacts || 0), 0);
-  const deliveryRate = totalMessages > 0 ? ((totalMessages / totalContacts) * 100).toFixed(1) : "0";
-
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <MessageCircle className="text-primary text-2xl mr-3" />
-              <span className="text-xl font-semibold text-slate-900">CampanhaWhats</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="icon">
-                <Bell className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center space-x-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={user.profileImageUrl} />
-                  <AvatarFallback className="bg-primary text-white">
-                    {user.firstName?.[0] || user.email?.[0] || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-slate-700 font-medium">
-                  {user.firstName || user.email}
-                </span>
-              </div>
-              <Button 
-                variant="ghost" 
-                onClick={() => window.location.href = "/api/logout"}
-              >
-                Sair
-              </Button>
-            </div>
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="flex items-center gap-2">
+          {whatsappStatus?.isConnected ? (
+            <Badge className="bg-green-100 text-green-800">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              WhatsApp Conectado
+            </Badge>
+          ) : (
+            <Badge className="bg-red-100 text-red-800">
+              <XCircle className="w-3 h-3 mr-1" />
+              WhatsApp Desconectado
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowQRModal(true)}
+            disabled={statusLoading}
+          >
+            <Smartphone className="w-4 h-4 mr-2" />
+            {whatsappStatus?.isConnected ? "Reconectar" : "Conectar WhatsApp"}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="campaigns">Campanhas</TabsTrigger>
+          <TabsTrigger value="contacts">Contatos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatsCard
+              title="Total de Campanhas"
+              value={totalCampaigns.toString()}
+              icon={<MessageSquare className="w-5 h-5" />}
+            />
+            <StatsCard
+              title="Total de Contatos"
+              value={totalContacts.toString()}
+              icon={<Users className="w-5 h-5" />}
+            />
+            <StatsCard
+              title="Mensagens Enviadas"
+              value={totalSent.toString()}
+              icon={<Send className="w-5 h-5" />}
+              valueColor="text-green-600"
+            />
+            <StatsCard
+              title="Mensagens Falharam"
+              value={totalFailed.toString()}
+              icon={<XCircle className="w-5 h-5" />}
+              valueColor="text-red-600"
+            />
           </div>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <StatsCard
-            title="Mensagens Enviadas"
-            value={totalMessages.toString()}
-            icon={<NotebookPen className="h-6 w-6" />}
-          />
-          <StatsCard
-            title="Taxa de Entrega"
-            value={`${deliveryRate}%`}
-            icon={<CheckCircle className="h-6 w-6" />}
-            valueColor="text-primary"
-          />
-          <StatsCard
-            title="Campanhas Ativas"
-            value={activeCampaigns.toString()}
-            icon={<Megaphone className="h-6 w-6" />}
-          />
-          <StatsCard
-            title="Contatos"
-            value={totalContacts.toString()}
-            icon={<Users className="h-6 w-6" />}
-          />
-        </div>
-
-        {/* Main Content Area */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Campaign Creator */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
-                  Nova Campanha
-                </CardTitle>
-                
-                {/* WhatsApp Connection Status */}
-                <div className={`p-4 rounded-lg border ${
-                  isConnected 
-                    ? 'bg-green-50 border-green-200' 
-                    : 'bg-red-50 border-red-200'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      {isConnected ? (
-                        <Wifi className="text-green-500 mr-2 h-5 w-5" />
-                      ) : (
-                        <WifiOff className="text-red-500 mr-2 h-5 w-5" />
-                      )}
-                      <span className={`font-medium ${
-                        isConnected ? 'text-green-700' : 'text-red-700'
-                      }`}>
-                        WhatsApp {isConnected ? 'Conectado' : 'Desconectado'}
-                      </span>
-                    </div>
-                    {isConnected ? (
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        onClick={() => disconnectMutation.mutate()}
-                        disabled={disconnectMutation.isPending}
-                      >
-                        Desconectar
-                      </Button>
-                    ) : (
-                      <Button 
-                        size="sm"
-                        onClick={() => setShowQRModal(true)}
-                        className="bg-primary text-white hover:bg-primary/90"
-                      >
-                        Conectar
-                      </Button>
-                    )}
-                  </div>
+          {/* Recent Campaigns */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                Campanhas Recentes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {campaignsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+                  <p className="text-gray-500">Carregando campanhas...</p>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <CampaignForm />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Recent Campaigns */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
-                  Campanhas Recentes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {campaignsLoading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
-                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : campaigns.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4">
-                    Nenhuma campanha criada ainda
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {campaigns.slice(0, 3).map((campaign: any) => (
-                      <div key={campaign.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <div>
-                          <p className="font-medium text-slate-900">{campaign.name}</p>
-                          <p className="text-sm text-slate-500">
-                            {new Date(campaign.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Badge 
-                          variant={campaign.status === 'completed' ? 'default' : 'secondary'}
-                        >
-                          {campaign.status === 'completed' ? 'Concluído' : 
-                           campaign.status === 'sending' ? 'Enviando' : 
-                           campaign.status === 'draft' ? 'Rascunho' : 'Falhado'}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Subscription Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
-                  Assinatura
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Crown className="text-white text-2xl" />
-                  </div>
-                  <p className="font-medium text-slate-900 mb-2">
-                    Plano {user.subscriptionPlan === 'active' ? 'Pro' : 'Básico'}
-                  </p>
-                  <p className="text-sm text-slate-500 mb-4">
-                    Status: {user.subscriptionStatus === 'active' ? 'Ativo' : 'Inativo'}
-                  </p>
-                  <Button 
-                    className="w-full bg-primary text-white hover:bg-primary/90"
-                    onClick={() => window.location.href = "/subscribe"}
-                  >
-                    Gerenciar Assinatura
+              ) : campaigns.length === 0 ? (
+                <div className="text-center py-8">
+                  <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-4">Nenhuma campanha criada ainda</p>
+                  <Button onClick={() => setShowCampaignForm(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Primeira Campanha
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </main>
+              ) : (
+                <div className="space-y-4">
+                  {campaigns.slice(0, 5).map((campaign: any) => (
+                    <div key={campaign.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <h3 className="font-medium">{campaign.name}</h3>
+                        <p className="text-sm text-gray-500">
+                          {campaign.sentCount || 0} enviadas de {campaign.totalContacts || 0} contatos
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusColor(campaign.status)}>
+                          {getStatusText(campaign.status)}
+                        </Badge>
+                        <div className="text-sm text-gray-500">
+                          {new Date(campaign.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* QR Code Modal */}
-      <QRModal 
-        isOpen={showQRModal} 
-        onClose={() => setShowQRModal(false)} 
-      />
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                Ações Rápidas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Button
+                  onClick={() => setShowCampaignForm(true)}
+                  className="h-auto p-4 justify-start"
+                  disabled={!whatsappStatus?.isConnected}
+                >
+                  <Plus className="w-5 h-5 mr-3" />
+                  <div className="text-left">
+                    <div className="font-medium">Nova Campanha</div>
+                    <div className="text-sm opacity-90">
+                      Criar e enviar mensagens em massa
+                    </div>
+                  </div>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setShowQRModal(true)}
+                  className="h-auto p-4 justify-start"
+                >
+                  <Smartphone className="w-5 h-5 mr-3" />
+                  <div className="text-left">
+                    <div className="font-medium">Conectar WhatsApp</div>
+                    <div className="text-sm opacity-90">
+                      Escaneie o QR code para conectar
+                    </div>
+                  </div>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="campaigns" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Minhas Campanhas</h2>
+            <Button
+              onClick={() => setShowCampaignForm(true)}
+              disabled={!whatsappStatus?.isConnected}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Nova Campanha
+            </Button>
+          </div>
+
+          {!whatsappStatus?.isConnected && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-orange-800">
+                <AlertCircle className="w-5 h-5" />
+                <span className="font-medium">
+                  Conecte seu WhatsApp para criar campanhas
+                </span>
+              </div>
+            </div>
+          )}
+
+          {campaignsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+              <p className="text-gray-500">Carregando campanhas...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {campaigns.map((campaign: any) => (
+                <Card key={campaign.id}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="truncate">{campaign.name}</span>
+                      <Badge className={getStatusColor(campaign.status)}>
+                        {getStatusText(campaign.status)}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {campaign.message}
+                      </p>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">
+                          {campaign.sentCount || 0} / {campaign.totalContacts || 0} enviadas
+                        </span>
+                        <span className="text-gray-500">
+                          {new Date(campaign.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="contacts" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Meus Contatos</h2>
+            <div className="text-sm text-gray-500">
+              {contacts.length} contatos cadastrados
+            </div>
+          </div>
+
+          {contactsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+              <p className="text-gray-500">Carregando contatos...</p>
+            </div>
+          ) : contacts.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 mb-4">Nenhum contato cadastrado</p>
+              <p className="text-sm text-gray-400">
+                Faça upload de uma planilha Excel na criação de campanhas
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {contacts.map((contact: any) => (
+                <Card key={contact.id}>
+                  <CardContent className="pt-6">
+                    <div className="space-y-2">
+                      <h3 className="font-medium">{contact.name}</h3>
+                      <p className="text-sm text-gray-600">{contact.phone}</p>
+                      {contact.email && (
+                        <p className="text-sm text-gray-600">{contact.email}</p>
+                      )}
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>
+                          {contact.totalCampaignsSent || 0} campanhas recebidas
+                        </span>
+                        {contact.lastCampaignSent && (
+                          <span>
+                            Último: {new Date(contact.lastCampaignSent).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <QRModal isOpen={showQRModal} onClose={() => setShowQRModal(false)} />
     </div>
   );
 }

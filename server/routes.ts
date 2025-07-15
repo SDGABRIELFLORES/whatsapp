@@ -69,11 +69,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/campaigns', requireAuth, async (req: any, res) => {
+  app.post('/api/campaigns', requireAuth, upload.single('image'), async (req: any, res) => {
     try {
       const userId = req.user.id;
+      
+      let imageUrl = null;
+      if (req.file) {
+        // Para simplificar, vamos salvar como base64 ou podemos implementar storage de arquivos
+        imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+      
       const campaignData = insertCampaignSchema.parse({
-        ...req.body,
+        name: req.body.name,
+        message: req.body.message,
+        imageUrl,
+        delayMin: parseInt(req.body.delayMin) || 6,
+        delayMax: parseInt(req.body.delayMax) || 12,
+        batchSize: parseInt(req.body.batchSize) || 10,
+        batchDelay: parseInt(req.body.batchDelay) || 1,
         userId
       });
       
@@ -238,21 +251,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const campaignId = parseInt(req.params.id);
+      const { contactIds } = req.body;
       
       const campaign = await storage.getCampaign(campaignId, userId);
       if (!campaign) {
         return res.status(404).json({ message: "Campaign not found" });
       }
       
-      const contacts = await storage.getContacts(userId, campaignId);
+      // Get selected contacts
+      let contacts = await storage.getContacts(userId);
+      if (contactIds && contactIds.length > 0) {
+        contacts = contacts.filter(contact => contactIds.includes(contact.id));
+      }
+      
       if (contacts.length === 0) {
-        return res.status(400).json({ message: "No contacts found for this campaign" });
+        return res.status(400).json({ message: "No contacts selected for this campaign" });
       }
       
       // Check WhatsApp connection
       const isConnected = await whatsappService.checkConnection(userId);
       if (!isConnected) {
-        return res.status(400).json({ message: "WhatsApp not connected" });
+        return res.status(400).json({ message: "WhatsApp not connected. Please scan the QR code first." });
       }
       
       // Update campaign status
@@ -272,26 +291,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
         bulkContacts,
         message,
-        campaign.imageUrl || undefined,
-        {
-          randomDelayMin: (campaign.delayMin || 6) * 1000,
-          randomDelayMax: (campaign.delayMax || 12) * 1000,
-          batchSize: campaign.batchSize || 10,
-          batchDelayMs: (campaign.batchDelay || 60) * 1000
-        }
+        campaign.imageUrl || undefined
       );
       
       // Update campaign with results
       await storage.updateCampaign(campaignId, {
-        status: result.success ? "completed" : "failed",
-        sentCount: result.sent,
+        status: result.success > 0 ? "completed" : "failed",
+        sentCount: result.success,
         failedCount: result.failed
       });
       
       // Log individual results
       for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i];
-        const status = i < result.sent ? "sent" : "failed";
+        const status = i < result.success ? "sent" : "failed";
         
         await storage.createCampaignLog({
           campaignId,
@@ -300,11 +313,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           errorMessage: status === "failed" ? result.errors[0] : undefined,
           sentAt: status === "sent" ? new Date() : undefined
         });
+        
+        // Update contact last campaign sent
+        if (status === "sent") {
+          await storage.updateContact(contact.id, {
+            lastCampaignSent: new Date(),
+            totalCampaignsSent: (contact.totalCampaignsSent || 0) + 1
+          });
+        }
       }
       
       res.json({
         message: "Campaign sent successfully",
-        sent: result.sent,
+        sent: result.success,
         failed: result.failed,
         errors: result.errors
       });

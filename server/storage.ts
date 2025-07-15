@@ -39,6 +39,7 @@ export interface IStorage {
   createContacts(contacts: InsertContact[]): Promise<Contact[]>;
   getContacts(userId: string, campaignId?: number): Promise<Contact[]>;
   deleteContacts(userId: string, campaignId?: number): Promise<boolean>;
+  updateContact(id: number, updates: Partial<Contact>): Promise<Contact>;
   
   // Campaign log operations
   createCampaignLog(log: InsertCampaignLog): Promise<CampaignLog>;
@@ -200,6 +201,15 @@ export class DatabaseStorage implements IStorage {
     }
     
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async updateContact(id: number, updates: Partial<Contact>): Promise<Contact> {
+    const [contact] = await db
+      .update(contacts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contacts.id, id))
+      .returning();
+    return contact;
   }
 
   // Campaign log operations

@@ -3,13 +3,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { MessageSquare, Users, TrendingUp, Shield } from "lucide-react";
-import { useLocation } from "wouter";
+import { MessageSquare, Users, BarChart3, Shield, Zap, Clock } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -17,12 +16,13 @@ const loginSchema = z.object({
 });
 
 const registerSchema = z.object({
+  firstName: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  lastName: z.string().min(2, "Sobrenome deve ter pelo menos 2 caracteres"),
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
   confirmPassword: z.string().min(6, "Confirmação de senha obrigatória"),
-  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Senhas não coincidem",
+  message: "As senhas não coincidem",
   path: ["confirmPassword"],
 });
 
@@ -30,9 +30,16 @@ type LoginData = z.infer<typeof loginSchema>;
 type RegisterData = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
-  const [, navigate] = useLocation();
-  const { user, isLoading, loginMutation, registerMutation } = useAuth();
-  const [activeTab, setActiveTab] = useState("login");
+  const { user, loginMutation, registerMutation } = useAuth();
+  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+
+  // Redirect if already authenticated
+  if (user) {
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+    return null;
+  }
 
   const loginForm = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
@@ -45,17 +52,13 @@ export default function AuthPage() {
   const registerForm = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      firstName: "",
+      lastName: "",
       email: "",
       password: "",
       confirmPassword: "",
-      name: "",
     },
   });
-
-  // Redirect if already logged in
-  if (!isLoading && user) {
-    return null;
-  }
 
   const onLogin = (data: LoginData) => {
     loginMutation.mutate(data);
@@ -67,212 +70,273 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        {/* Hero Section */}
-        <div className="hidden lg:block space-y-8">
-          <div className="text-center lg:text-left">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-              CampanhaWhats
-            </h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
-              A plataforma completa para suas campanhas no WhatsApp
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6">
-            <div className="flex items-center space-x-4">
-              <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-full">
-                <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Mensagens em Massa
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Envie campanhas para milhares de contatos
-                </p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid lg:grid-cols-2 gap-8 items-center">
+          {/* Hero Section */}
+          <div className="space-y-6">
+            <div className="text-center lg:text-left">
+              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+                CampanhaWhats
+              </h1>
+              <p className="text-xl text-gray-600 mb-8">
+                A plataforma mais completa para campanhas de WhatsApp do Brasil
+              </p>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-full">
-                <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Gerenciamento de Contatos
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <MessageSquare className="w-8 h-8 text-blue-600 mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Envios em Massa
                 </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Importe e organize seus contatos facilmente
+                <p className="text-sm text-gray-600">
+                  Envie mensagens para milhares de contatos de forma automatizada
                 </p>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-full">
-                <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <Users className="w-8 h-8 text-green-600 mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Gestão de Contatos
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Importe planilhas e gerencie sua base de contatos facilmente
+                </p>
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
+
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <BarChart3 className="w-8 h-8 text-purple-600 mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">
                   Relatórios Detalhados
                 </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Acompanhe o desempenho das suas campanhas
+                <p className="text-sm text-gray-600">
+                  Acompanhe o desempenho das suas campanhas em tempo real
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <Shield className="w-8 h-8 text-red-600 mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Anti-Ban
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Sistema inteligente de delays para evitar bloqueios
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-full">
-                <Shield className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
+              <div className="flex items-center gap-3 mb-3">
+                <Zap className="w-6 h-6" />
+                <h3 className="font-semibold">Teste Grátis por 7 Dias</h3>
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Anti-Ban Protection
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  Envios seguros com intervalos inteligentes
-                </p>
+              <p className="text-blue-100 mb-4">
+                Comece agora mesmo e teste todas as funcionalidades sem compromisso
+              </p>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="w-4 h-4" />
+                <span>Apenas R$ 79/mês após o período de teste</span>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Auth Form */}
-        <div className="w-full max-w-md mx-auto">
-          <Card className="shadow-lg">
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl font-bold">
-                Bem-vindo ao CampanhaWhats
-              </CardTitle>
-              <CardDescription>
-                Faça login ou crie sua conta para começar
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="login">Entrar</TabsTrigger>
-                  <TabsTrigger value="register">Criar Conta</TabsTrigger>
-                </TabsList>
+          {/* Auth Form */}
+          <div className="w-full max-w-md mx-auto">
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "login" | "register")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Entrar</TabsTrigger>
+                <TabsTrigger value="register">Criar Conta</TabsTrigger>
+              </TabsList>
 
-                <TabsContent value="login" className="space-y-4">
-                  <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="seu@email.com"
-                        {...loginForm.register("email")}
-                      />
-                      {loginForm.formState.errors.email && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {loginForm.formState.errors.email.message}
-                        </p>
-                      )}
+              <TabsContent value="login">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Entrar na sua conta</CardTitle>
+                    <CardDescription>
+                      Digite seus dados para acessar o painel
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Form {...loginForm}>
+                      <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
+                        <FormField
+                          control={loginForm.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Email</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="email"
+                                  placeholder="seu@email.com"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={loginForm.control}
+                          name="password"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Senha</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="password"
+                                  placeholder="••••••••"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={loginMutation.isPending}
+                        >
+                          {loginMutation.isPending ? "Entrando..." : "Entrar"}
+                        </Button>
+                      </form>
+                    </Form>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="register">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Criar sua conta</CardTitle>
+                    <CardDescription>
+                      Comece seu teste gratuito agora mesmo
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Form {...registerForm}>
+                      <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <FormField
+                            control={registerForm.control}
+                            name="firstName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Nome</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="João"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={registerForm.control}
+                            name="lastName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Sobrenome</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="Silva"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <FormField
+                          control={registerForm.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Email</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="email"
+                                  placeholder="seu@email.com"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={registerForm.control}
+                          name="password"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Senha</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="password"
+                                  placeholder="••••••••"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={registerForm.control}
+                          name="confirmPassword"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Confirmar Senha</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="password"
+                                  placeholder="••••••••"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={registerMutation.isPending}
+                        >
+                          {registerMutation.isPending ? "Criando conta..." : "Criar Conta Gratuita"}
+                        </Button>
+                      </form>
+                    </Form>
+
+                    <div className="mt-4 text-center">
+                      <p className="text-xs text-gray-500">
+                        Ao criar uma conta você concorda com nossos{" "}
+                        <a href="#" className="text-blue-600 hover:underline">
+                          termos de uso
+                        </a>
+                        {" "}e{" "}
+                        <a href="#" className="text-blue-600 hover:underline">
+                          política de privacidade
+                        </a>
+                      </p>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Senha</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="Sua senha"
-                        {...loginForm.register("password")}
-                      />
-                      {loginForm.formState.errors.password && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {loginForm.formState.errors.password.message}
-                        </p>
-                      )}
-                    </div>
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={loginMutation.isPending}
-                    >
-                      {loginMutation.isPending ? "Entrando..." : "Entrar"}
-                    </Button>
-                  </form>
-                </TabsContent>
-
-                <TabsContent value="register" className="space-y-4">
-                  <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nome Completo</Label>
-                      <Input
-                        id="name"
-                        type="text"
-                        placeholder="Seu nome completo"
-                        {...registerForm.register("name")}
-                      />
-                      {registerForm.formState.errors.name && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {registerForm.formState.errors.name.message}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="register-email">Email</Label>
-                      <Input
-                        id="register-email"
-                        type="email"
-                        placeholder="seu@email.com"
-                        {...registerForm.register("email")}
-                      />
-                      {registerForm.formState.errors.email && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {registerForm.formState.errors.email.message}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="register-password">Senha</Label>
-                      <Input
-                        id="register-password"
-                        type="password"
-                        placeholder="Mínimo 6 caracteres"
-                        {...registerForm.register("password")}
-                      />
-                      {registerForm.formState.errors.password && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {registerForm.formState.errors.password.message}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-password">Confirmar Senha</Label>
-                      <Input
-                        id="confirm-password"
-                        type="password"
-                        placeholder="Confirme sua senha"
-                        {...registerForm.register("confirmPassword")}
-                      />
-                      {registerForm.formState.errors.confirmPassword && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {registerForm.formState.errors.confirmPassword.message}
-                        </p>
-                      )}
-                    </div>
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={registerMutation.isPending}
-                    >
-                      {registerMutation.isPending ? "Criando conta..." : "Criar Conta"}
-                    </Button>
-                  </form>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </div>
     </div>

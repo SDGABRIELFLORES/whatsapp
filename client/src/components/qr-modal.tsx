@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, QrCode } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, Smartphone, CheckCircle, X } from "lucide-react";
 
 interface QRModalProps {
   isOpen: boolean;
@@ -10,79 +10,106 @@ interface QRModalProps {
 }
 
 export default function QRModal({ isOpen, onClose }: QRModalProps) {
-  const queryClient = useQueryClient();
-  const [connectionStatus, setConnectionStatus] = useState<string>("Aguardando conexão...");
+  const [connected, setConnected] = useState(false);
 
-  // Fetch QR code when modal opens
-  const { data: qrData, isLoading } = useQuery({
+  // Get QR code
+  const { data: qrData, isLoading: qrLoading } = useQuery({
     queryKey: ["/api/whatsapp/qr"],
-    enabled: isOpen,
+    enabled: isOpen && !connected,
     refetchInterval: 5000, // Refresh every 5 seconds
   });
 
   // Check connection status
-  const { data: status } = useQuery({
+  const { data: statusData } = useQuery({
     queryKey: ["/api/whatsapp/status"],
     enabled: isOpen,
     refetchInterval: 2000, // Check every 2 seconds
   });
 
   useEffect(() => {
-    if (status?.isConnected) {
-      setConnectionStatus("Conectado com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
+    if (statusData?.isConnected) {
+      setConnected(true);
+      // Close modal after 2 seconds if connected
       setTimeout(() => {
         onClose();
       }, 2000);
-    } else if (isOpen) {
-      setConnectionStatus("Aguardando conexão...");
     }
-  }, [status?.isConnected, isOpen, onClose, queryClient]);
+  }, [statusData, onClose]);
+
+  const handleClose = () => {
+    setConnected(false);
+    onClose();
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center gap-2">
+            <Smartphone className="w-5 h-5" />
             Conectar WhatsApp
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
           </DialogTitle>
         </DialogHeader>
         
-        <div className="text-center py-6">
-          <div className="qr-code-container w-48 h-48 rounded-lg flex items-center justify-center mx-auto mb-4">
-            {isLoading ? (
-              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-            ) : qrData?.qrCode ? (
-              <img 
-                src={qrData.qrCode} 
-                alt="QR Code" 
-                className="max-w-full max-h-full object-contain"
-              />
-            ) : (
-              <QrCode className="text-slate-400 text-6xl" />
-            )}
-          </div>
-          
-          <p className="text-slate-600 mb-4">
-            Abra o WhatsApp no seu celular e escaneie o QR Code
-          </p>
-          
-          <div className="flex items-center justify-center space-x-2 text-sm text-slate-500">
-            {status?.isConnected ? (
-              <>
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-green-600 font-medium">Conectado!</span>
-              </>
-            ) : (
-              <>
-                <div className="animate-spin w-3 h-3 border-2 border-primary border-t-transparent rounded-full"></div>
-                <span>{connectionStatus}</span>
-              </>
-            )}
-          </div>
+        <div className="space-y-4">
+          {connected ? (
+            <div className="text-center py-8">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-green-700">
+                WhatsApp Conectado!
+              </h3>
+              <p className="text-gray-600">
+                Sua conta foi conectada com sucesso.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="text-center space-y-4">
+                <div className="bg-gray-50 rounded-lg p-6">
+                  {qrLoading ? (
+                    <div className="flex flex-col items-center space-y-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                      <p className="text-gray-600">Gerando código QR...</p>
+                    </div>
+                  ) : qrData?.qrCode ? (
+                    <div className="flex flex-col items-center space-y-4">
+                      <img 
+                        src={qrData.qrCode} 
+                        alt="QR Code" 
+                        className="w-48 h-48 border rounded-lg"
+                      />
+                      <p className="text-sm text-gray-600">
+                        Escaneie o código QR com seu WhatsApp
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center space-y-4">
+                      <X className="w-8 h-8 text-red-500" />
+                      <p className="text-red-600">
+                        Erro ao gerar QR code. Tente novamente.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-left space-y-2">
+                  <h4 className="font-medium">Como conectar:</h4>
+                  <ol className="text-sm text-gray-600 space-y-1">
+                    <li>1. Abra o WhatsApp no seu celular</li>
+                    <li>2. Vá em Menu → Aparelhos conectados</li>
+                    <li>3. Toque em "Conectar um aparelho"</li>
+                    <li>4. Aponte a câmera para o código QR</li>
+                  </ol>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={handleClose}>
+            Fechar
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

@@ -69,9 +69,10 @@ export const contacts = pgTable("contacts", {
   phone: varchar("phone").notNull(),
   email: varchar("email"),
   lastCampaignSent: timestamp("last_campaign_sent"),
-  campaignCount: integer("campaign_count").default(0),
+  totalCampaignsSent: integer("total_campaigns_sent").default(0),
   customData: jsonb("custom_data"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Campaign logs table
