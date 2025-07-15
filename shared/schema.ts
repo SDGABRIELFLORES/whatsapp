@@ -25,17 +25,18 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table (mandatory for Replit Auth)
+// User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().notNull(),
-  email: varchar("email").unique(),
+  email: varchar("email").unique().notNull(),
+  password: varchar("password"),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  mercadopagoSubscriptionId: varchar("mercadopago_subscription_id"),
-  subscriptionStatus: varchar("subscription_status").default("inactive"),
-  subscriptionPlan: varchar("subscription_plan").default("basic"),
   isAdmin: boolean("is_admin").default(false),
+  subscriptionStatus: varchar("subscription_status").default("trial"),
+  trialEndsAt: timestamp("trial_ends_at"),
+  mercadopagoSubscriptionId: varchar("mercadopago_subscription_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -67,6 +68,8 @@ export const contacts = pgTable("contacts", {
   name: varchar("name").notNull(),
   phone: varchar("phone").notNull(),
   email: varchar("email"),
+  lastCampaignSent: timestamp("last_campaign_sent"),
+  campaignCount: integer("campaign_count").default(0),
   customData: jsonb("custom_data"),
   createdAt: timestamp("created_at").defaultNow(),
 });

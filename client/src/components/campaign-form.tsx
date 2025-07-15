@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import FileUpload from "@/components/ui/file-upload";
+import ImageUpload from "@/components/image-upload";
 
 const campaignSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -30,6 +31,7 @@ export default function CampaignForm() {
   const queryClient = useQueryClient();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedContacts, setUploadedContacts] = useState<any[]>([]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const form = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchema),

@@ -1,0 +1,77 @@
+incipais Mudanças:
+Arquitetura Multi-usuário:
+
+Substituí a variável global sock por um Map chamado sessions que armazena múltiplas conexões
+Implementei diretórios de autenticação separados para cada usuário dentro de auth/[userId]
+Todo o sistema de autenticação e conexão foi adaptado para trabalhar com múltiplos usuários
+Funções Novas:
+
+getUserSession() - Gerencia e inicializa sessões por usuário
+initializeSession() - Cria novas sessões de WhatsApp para usuários específicos
+validateUserId() - Middleware que verifica e valida IDs de usuário
+Logs e Gerenciamento:
+
+Adicionei prefixos de usuário nos logs para facilitar depuração
+O sistema agora mantém sessões separadas sem conflitos
+Endpoints Disponíveis:
+1. GET /sessions
+Função: Lista todas as sessões ativas no sistema
+Resposta: Array com IDs de usuário e status de conexão de cada um
+Exemplo de resposta:
+JSON
+[
+  {"userId": "user1", "isConnected": true, "hasQrCode": false},
+  {"userId": "user2", "isConnected": false, "hasQrCode": true}
+]
+2. GET /
+Função: Mostra o status de conexão para um usuário específico
+Parâmetros: userId (obrigatório)
+Exemplo: /?userId=user1
+Resposta: Página HTML indicando se o usuário está conectado
+3. GET /connect
+Função: Fornece QR Code para conexão ao WhatsApp
+Parâmetros: userId (obrigatório)
+Exemplo: /connect?userId=user1
+Resposta: Página HTML com QR Code ou status de conexão
+4. POST /send
+Função: Envia mensagem individual do WhatsApp
+Parâmetros JSON:
+JSON
+{
+  "userId": "user1",
+  "number": "5511999999999",
+  "message": "Olá, tudo bem?"
+}
+Resposta: Status de sucesso ou erro do envio
+5. POST /send-bulk
+Função: Envia mensagens para múltiplos contatos
+Parâmetros JSON:
+JSON
+{
+  "userId": "user1",
+  "contatos": [
+    {"nome": "João", "numero": "5511999999999"},
+    {"nome": "Maria", "numero": "5511888888888"}
+  ],
+  "mensagemBase": "Olá [nome], tudo bem?",
+  "imagemUrl": "https://exemplo.com/imagem.jpg" (opcional),
+  "antiBanSettings": {
+    "randomDelayMin": 6000,
+    "randomDelayMax": 9000,
+    "batchSize": 10,
+    "batchDelayMs": 60000
+  } (opcional)
+}
+Resposta: Estatísticas de envio e erros
+6. POST /disconnect
+Função: Desconecta sessão de WhatsApp de um usuário
+Parâmetros JSON:
+JSON
+{
+  "userId": "user1"
+}
+Resposta: Confirmação de desconexão
+Como Usar:
+Para que cada usuário tenha sua própria sessão do WhatsApp, todos os endpoints devem receber um userId único. Cada usuário precisa escanear seu próprio QR Code através do endpoint /connect?userId=seuUserID.
+
+O código completo está na resposta anterior, com todas as modificações necessárias para implementar este sistema multi-usuário.

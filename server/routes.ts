@@ -4,7 +4,7 @@ import multer from "multer";
 import { MercadoPagoConfig, Payment, PreApproval } from "mercadopago";
 import { z } from "zod";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, requireAuth } from "./auth";
 import { whatsappService } from "./services/whatsapp";
 import { excelService } from "./services/excel";
 import { insertCampaignSchema, insertContactSchema } from "@shared/schema";
@@ -43,24 +43,24 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
-  await setupAuth(app);
+  setupAuth(app);
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // User routes
+  app.get('/api/user', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      res.json(req.user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
+  // All routes below this point require authentication
+
   // Campaign routes
-  app.get('/api/campaigns', isAuthenticated, async (req: any, res) => {
+  app.get('/api/campaigns', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaigns = await storage.getCampaigns(userId);
       res.json(campaigns);
     } catch (error) {
@@ -69,9 +69,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/campaigns', isAuthenticated, async (req: any, res) => {
+  app.post('/api/campaigns', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignData = insertCampaignSchema.parse({
         ...req.body,
         userId
@@ -85,9 +85,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/campaigns/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/campaigns/:id', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignId = parseInt(req.params.id);
       const campaign = await storage.getCampaign(campaignId, userId);
       
@@ -102,9 +102,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/campaigns/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/campaigns/:id', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignId = parseInt(req.params.id);
       
       // Verify ownership
@@ -121,9 +121,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/campaigns/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/campaigns/:id', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignId = parseInt(req.params.id);
       
       const success = await storage.deleteCampaign(campaignId, userId);
@@ -140,9 +140,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Contact routes
-  app.post('/api/contacts/upload', isAuthenticated, upload.single('file'), async (req: any, res) => {
+  app.post('/api/contacts/upload', requireAuth, upload.single('file'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignId = req.body.campaignId ? parseInt(req.body.campaignId) : undefined;
       
       if (!req.file) {
@@ -179,9 +179,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/contacts', isAuthenticated, async (req: any, res) => {
+  app.get('/api/contacts', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignId = req.query.campaignId ? parseInt(req.query.campaignId) : undefined;
       
       const contacts = await storage.getContacts(userId, campaignId);
@@ -193,9 +193,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // WhatsApp routes
-  app.get('/api/whatsapp/qr', isAuthenticated, async (req: any, res) => {
+  app.get('/api/whatsapp/qr', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const qrCode = await whatsappService.getQRCode(userId);
       
       res.json({ qrCode });
@@ -205,9 +205,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/whatsapp/status', isAuthenticated, async (req: any, res) => {
+  app.get('/api/whatsapp/status', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const session = await storage.getWhatsappSession(userId);
       const isConnected = await whatsappService.checkConnection(userId);
       
@@ -221,9 +221,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/whatsapp/disconnect', isAuthenticated, async (req: any, res) => {
+  app.post('/api/whatsapp/disconnect', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const success = await whatsappService.disconnect(userId);
       
       res.json({ success });
@@ -234,9 +234,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Campaign send route
-  app.post('/api/campaigns/:id/send', isAuthenticated, async (req: any, res) => {
+  app.post('/api/campaigns/:id/send', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const campaignId = parseInt(req.params.id);
       
       const campaign = await storage.getCampaign(campaignId, userId);
@@ -316,9 +316,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // MercadoPago routes
   if (mercadopago) {
-    app.post('/api/create-subscription', isAuthenticated, async (req: any, res) => {
+    app.post('/api/create-subscription', requireAuth, async (req: any, res) => {
       try {
-        const userId = req.user.claims.sub;
+        const userId = req.user.id;
         const user = await storage.getUser(userId);
         
         if (!user) {
@@ -391,9 +391,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Admin routes
-  app.get('/api/admin/users', isAuthenticated, async (req: any, res) => {
+  app.get('/api/admin/users', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (!user?.isAdmin) {
@@ -408,9 +408,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/admin/stats', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = await storage.getUser(userId);
       
       if (!user?.isAdmin) {
