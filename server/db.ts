@@ -1,11 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://your-project.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'your-service-role-key';
-
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.warn('⚠️  SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY não configurados. Configure no arquivo .env para usar o banco de dados.');
-}
+console.log('🔗 Conectando ao Supabase:', supabaseUrl);
 
 export const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
