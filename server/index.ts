@@ -1,8 +1,7 @@
-import { config } from "dotenv";
-config();
+import dotenv from 'dotenv';
 
-import { config } from "dotenv";
-config();
+// Carregar variáveis de ambiente
+dotenv.config();
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
