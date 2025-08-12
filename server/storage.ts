@@ -1,25 +1,18 @@
-import {
-  users,
-  campaigns,
-  contacts,
-  campaignLogs,
-  whatsappSessions,
-  contactLists,
-  type User,
-  type UpsertUser,
-  type Campaign,
-  type InsertCampaign,
-  type Contact,
-  type InsertContact,
-  type CampaignLog,
-  type InsertCampaignLog,
-  type WhatsappSession,
-  type InsertWhatsappSession,
-  type ContactList,
-  type InsertContactList,
+import { supabase } from "./db";
+import type {
+  User,
+  UpsertUser,
+  Campaign,
+  InsertCampaign,
+  Contact,
+  InsertContact,
+  CampaignLog,
+  InsertCampaignLog,
+  WhatsappSession,
+  InsertWhatsappSession,
+  ContactList,
+  InsertContactList,
 } from "@shared/schema";
-import { db } from "./db";
-import { eq, desc, and, count, sum, lte, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -40,13 +33,13 @@ export interface IStorage {
   getCampaign(id: number, userId: string): Promise<Campaign | undefined>;
   updateCampaign(id: number, updates: Partial<Campaign>): Promise<Campaign>;
   deleteCampaign(id: number, userId: string): Promise<boolean>;
-  getScheduledCampaigns(date: Date): Promise<Campaign[]>; // Novo método
+  getScheduledCampaigns(date: Date): Promise<Campaign[]>;
 
   // Contact operations
   createContact(contact: InsertContact): Promise<Contact>;
   createContacts(contacts: InsertContact[]): Promise<Contact[]>;
   getContacts(userId: string, campaignId?: number): Promise<Contact[]>;
-  getContactsByIds(contactIds: number[]): Promise<Contact[]>; // Novo método
+  getContactsByIds(contactIds: number[]): Promise<Contact[]>;
   deleteContacts(userId: string, campaignId?: number): Promise<boolean>;
   updateContact(id: number, updates: Partial<Contact>): Promise<Contact>;
 
@@ -73,7 +66,6 @@ export interface IStorage {
     updates: Partial<ContactList>,
   ): Promise<ContactList>;
   deleteContactList(id: number, userId: string): Promise<boolean>;
-  // Novos métodos adicionados
   getContactsInList(listId: number): Promise<Contact[]>;
   updateContactsInList(listId: number, contactIds: number[]): Promise<boolean>;
 
@@ -87,178 +79,224 @@ export interface IStorage {
   }>;
 }
 
-export class DatabaseStorage implements IStorage {
+export class SupabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching user:', error);
+      return undefined;
+    }
+    
+    return data as User;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') return undefined; // No rows found
+      console.error('Error fetching user by email:', error);
+      return undefined;
+    }
+    
+    return data as User;
   }
 
   async createUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(userData).returning();
-    return user;
+    const { data, error } = await supabase
+      .from('users')
+      .insert(userData)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error creating user: ${error.message}`);
+    }
+    
+    return data as User;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
+    const { data, error } = await supabase
+      .from('users')
+      .upsert({
+        ...userData,
+        updated_at: new Date().toISOString(),
       })
-      .returning();
-    return user;
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error upserting user: ${error.message}`);
+    }
+    
+    return data as User;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
-    return user;
+    const { data, error } = await supabase
+      .from('users')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error updating user: ${error.message}`);
+    }
+    
+    return data as User;
   }
 
   async updateUserMercadoPagoInfo(
     userId: string,
     mercadopagoSubscriptionId: string,
   ): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({
-        mercadopagoSubscriptionId,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
+    return this.updateUser(userId, {
+      mercadopagoSubscriptionId,
+    });
   }
 
   async updateUserSubscriptionStatus(
     userId: string,
     status: string,
   ): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({
-        subscriptionStatus: status,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
+    return this.updateUser(userId, {
+      subscriptionStatus: status,
+    });
   }
 
   // Campaign operations
   async createCampaign(campaign: InsertCampaign): Promise<Campaign> {
-    // Simplified method: just create the campaign without updating user's campaign count
-    const [newCampaign] = await db
-      .insert(campaigns)
-      .values(campaign)
-      .returning();
-
-    return newCampaign;
+    const { data, error } = await supabase
+      .from('campaigns')
+      .insert(campaign)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error creating campaign: ${error.message}`);
+    }
+    
+    return data as Campaign;
   }
 
   async getCampaigns(userId: string): Promise<Campaign[]> {
-    return await db
-      .select()
-      .from(campaigns)
-      .where(eq(campaigns.userId, userId))
-      .orderBy(desc(campaigns.createdAt));
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      throw new Error(`Error fetching campaigns: ${error.message}`);
+    }
+    
+    return data as Campaign[];
   }
 
   async getCampaign(id: number, userId: string): Promise<Campaign | undefined> {
-    const [campaign] = await db
-      .select()
-      .from(campaigns)
-      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
-    return campaign;
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') return undefined;
+      console.error('Error fetching campaign:', error);
+      return undefined;
+    }
+    
+    return data as Campaign;
   }
 
   async updateCampaign(
     id: number,
     updates: Partial<Campaign> & { scheduledContacts?: number[] },
   ): Promise<Campaign> {
-    const updatesWithoutScheduledContacts = { ...updates };
-
-    // Se tiver scheduledContacts, transforme em JSON para armazenar
+    const updateData = { ...updates };
+    
     if (updates.scheduledContacts) {
-      // @ts-ignore - scheduledContactsData não está no tipo original
-      updatesWithoutScheduledContacts.scheduledContactsData = JSON.stringify(
-        updates.scheduledContacts,
-      );
-      delete updatesWithoutScheduledContacts.scheduledContacts;
+      updateData.scheduledContactsData = JSON.stringify(updates.scheduledContacts);
+      delete updateData.scheduledContacts;
     }
-
-    const [campaign] = await db
-      .update(campaigns)
-      .set({ ...updatesWithoutScheduledContacts, updatedAt: new Date() })
-      .where(eq(campaigns.id, id))
-      .returning();
-
-    // Converte de volta para array ao retornar
+    
+    const { data, error } = await supabase
+      .from('campaigns')
+      .update({
+        ...updateData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error updating campaign: ${error.message}`);
+    }
+    
+    const campaign = data as Campaign;
+    
+    // Convert scheduledContactsData back to array
     if (campaign.scheduledContactsData) {
       try {
-        // @ts-ignore
-        campaign.scheduledContacts = JSON.parse(campaign.scheduledContactsData);
+        (campaign as any).scheduledContacts = JSON.parse(campaign.scheduledContactsData);
       } catch (e) {
-        // @ts-ignore
-        campaign.scheduledContacts = [];
+        (campaign as any).scheduledContacts = [];
       }
     }
-
+    
     return campaign;
   }
 
   async deleteCampaign(id: number, userId: string): Promise<boolean> {
-    // Primeiro exclui os logs relacionados à campanha
-    await db.delete(campaignLogs).where(eq(campaignLogs.campaignId, id));
-
-    // Depois exclui os contatos relacionados à campanha
-    await db.delete(contacts).where(eq(contacts.campaignId, id));
-
-    // Por fim, exclui a campanha
-    const result = await db
-      .delete(campaigns)
-      .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)));
-
-    return (result.rowCount ?? 0) > 0;
+    const { error } = await supabase
+      .from('campaigns')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error('Error deleting campaign:', error);
+      return false;
+    }
+    
+    return true;
   }
 
-  // Novo método para obter campanhas agendadas que já passaram do horário programado
   async getScheduledCampaigns(date: Date): Promise<Campaign[]> {
-    const campaignsResult = await db
-      .select()
-      .from(campaigns)
-      .where(
-        and(
-          eq(campaigns.status, "scheduled"),
-          lte(campaigns.scheduledAt, date),
-        ),
-      );
-
-    // Converter scheduledContactsData de JSON para array
-    return campaignsResult.map((campaign) => {
-      try {
-        if (campaign.scheduledContactsData) {
-          // @ts-ignore
-          campaign.scheduledContacts = JSON.parse(
-            campaign.scheduledContactsData,
-          );
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('status', 'scheduled')
+      .lte('scheduled_at', date.toISOString());
+    
+    if (error) {
+      throw new Error(`Error fetching scheduled campaigns: ${error.message}`);
+    }
+    
+    return (data as Campaign[]).map(campaign => {
+      if (campaign.scheduledContactsData) {
+        try {
+          (campaign as any).scheduledContacts = JSON.parse(campaign.scheduledContactsData);
+        } catch (e) {
+          (campaign as any).scheduledContacts = [];
         }
-      } catch (e) {
-        // @ts-ignore
-        campaign.scheduledContacts = [];
       }
       return campaign;
     });
@@ -266,127 +304,357 @@ export class DatabaseStorage implements IStorage {
 
   // Contact operations
   async createContact(contact: InsertContact): Promise<Contact> {
-    const [newContact] = await db.insert(contacts).values(contact).returning();
-    return newContact;
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert(contact)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error creating contact: ${error.message}`);
+    }
+    
+    return data as Contact;
   }
 
   async createContacts(contactList: InsertContact[]): Promise<Contact[]> {
-    return await db.insert(contacts).values(contactList).returning();
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert(contactList)
+      .select();
+    
+    if (error) {
+      throw new Error(`Error creating contacts: ${error.message}`);
+    }
+    
+    return data as Contact[];
   }
 
   async getContacts(userId: string, campaignId?: number): Promise<Contact[]> {
+    let query = supabase
+      .from('contacts')
+      .select('*')
+      .eq('user_id', userId);
+    
     if (campaignId) {
-      return await db
-        .select()
-        .from(contacts)
-        .where(
-          and(eq(contacts.userId, userId), eq(contacts.campaignId, campaignId)),
-        );
+      query = query.eq('campaign_id', campaignId);
     }
-
-    return await db.select().from(contacts).where(eq(contacts.userId, userId));
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      throw new Error(`Error fetching contacts: ${error.message}`);
+    }
+    
+    return data as Contact[];
   }
 
-  // Novo método para buscar contatos por IDs
   async getContactsByIds(contactIds: number[]): Promise<Contact[]> {
     if (!contactIds || contactIds.length === 0) {
       return [];
     }
-    return await db
-      .select()
-      .from(contacts)
-      .where(inArray(contacts.id, contactIds));
+    
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .in('id', contactIds);
+    
+    if (error) {
+      throw new Error(`Error fetching contacts by IDs: ${error.message}`);
+    }
+    
+    return data as Contact[];
   }
 
   async deleteContacts(userId: string, campaignId?: number): Promise<boolean> {
-    let result;
-
+    let query = supabase
+      .from('contacts')
+      .delete()
+      .eq('user_id', userId);
+    
     if (campaignId) {
-      result = await db
-        .delete(contacts)
-        .where(
-          and(eq(contacts.userId, userId), eq(contacts.campaignId, campaignId)),
-        );
-    } else {
-      result = await db.delete(contacts).where(eq(contacts.userId, userId));
+      query = query.eq('campaign_id', campaignId);
     }
-
-    return (result.rowCount ?? 0) > 0;
+    
+    const { error } = await query;
+    
+    if (error) {
+      console.error('Error deleting contacts:', error);
+      return false;
+    }
+    
+    return true;
   }
 
   async updateContact(id: number, updates: Partial<Contact>): Promise<Contact> {
-    const [contact] = await db
-      .update(contacts)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(contacts.id, id))
-      .returning();
-    return contact;
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error updating contact: ${error.message}`);
+    }
+    
+    return data as Contact;
   }
 
   // Campaign log operations
   async createCampaignLog(log: InsertCampaignLog): Promise<CampaignLog> {
-    const [newLog] = await db.insert(campaignLogs).values(log).returning();
-    return newLog;
+    const { data, error } = await supabase
+      .from('campaign_logs')
+      .insert(log)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error creating campaign log: ${error.message}`);
+    }
+    
+    return data as CampaignLog;
   }
 
   async getCampaignLogs(campaignId: number): Promise<CampaignLog[]> {
-    return await db
-      .select()
-      .from(campaignLogs)
-      .where(eq(campaignLogs.campaignId, campaignId))
-      .orderBy(desc(campaignLogs.createdAt));
+    const { data, error } = await supabase
+      .from('campaign_logs')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      throw new Error(`Error fetching campaign logs: ${error.message}`);
+    }
+    
+    return data as CampaignLog[];
   }
 
   // WhatsApp session operations
   async createOrUpdateWhatsappSession(
     session: InsertWhatsappSession,
   ): Promise<WhatsappSession> {
-    const [existing] = await db
+    const { data, error } = await supabase
+      .from('whatsapp_sessions')
+      .upsert({
+        ...session,
+        updated_at: new Date().toISOString(),
+      })
       .select()
-      .from(whatsappSessions)
-      .where(eq(whatsappSessions.userId, session.userId));
-
-    if (existing) {
-      const [updated] = await db
-        .update(whatsappSessions)
-        .set({ ...session, updatedAt: new Date() })
-        .where(eq(whatsappSessions.userId, session.userId))
-        .returning();
-      return updated;
-    } else {
-      const [newSession] = await db
-        .insert(whatsappSessions)
-        .values(session)
-        .returning();
-      return newSession;
+      .single();
+    
+    if (error) {
+      throw new Error(`Error creating/updating WhatsApp session: ${error.message}`);
     }
+    
+    return data as WhatsappSession;
   }
 
   async getWhatsappSession(
     userId: string,
   ): Promise<WhatsappSession | undefined> {
-    const [session] = await db
-      .select()
-      .from(whatsappSessions)
-      .where(eq(whatsappSessions.userId, userId));
-    return session;
+    const { data, error } = await supabase
+      .from('whatsapp_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') return undefined;
+      console.error('Error fetching WhatsApp session:', error);
+      return undefined;
+    }
+    
+    return data as WhatsappSession;
   }
 
   async updateWhatsappSession(
     userId: string,
     updates: Partial<WhatsappSession>,
   ): Promise<WhatsappSession> {
-    const [session] = await db
-      .update(whatsappSessions)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(whatsappSessions.userId, userId))
-      .returning();
-    return session;
+    const { data, error } = await supabase
+      .from('whatsapp_sessions')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error updating WhatsApp session: ${error.message}`);
+    }
+    
+    return data as WhatsappSession;
+  }
+
+  // Contact List operations
+  async createContactList(
+    contactList: InsertContactList,
+  ): Promise<ContactList> {
+    const { data, error } = await supabase
+      .from('contact_lists')
+      .insert(contactList)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error creating contact list: ${error.message}`);
+    }
+    
+    return data as ContactList;
+  }
+
+  async getContactLists(userId: string): Promise<ContactList[]> {
+    const { data, error } = await supabase
+      .from('contact_lists')
+      .select(`
+        *,
+        contact_count:contact_list_members(count)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      throw new Error(`Error fetching contact lists: ${error.message}`);
+    }
+    
+    return data.map(list => ({
+      ...list,
+      contactCount: list.contact_count?.[0]?.count || 0
+    })) as ContactList[];
+  }
+
+  async getContactList(
+    id: number,
+    userId: string,
+  ): Promise<ContactList | undefined> {
+    const { data, error } = await supabase
+      .from('contact_lists')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') return undefined;
+      console.error('Error fetching contact list:', error);
+      return undefined;
+    }
+    
+    return data as ContactList;
+  }
+
+  async updateContactList(
+    id: number,
+    updates: Partial<ContactList>,
+  ): Promise<ContactList> {
+    const { data, error } = await supabase
+      .from('contact_lists')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Error updating contact list: ${error.message}`);
+    }
+    
+    return data as ContactList;
+  }
+
+  async deleteContactList(id: number, userId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('contact_lists')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error('Error deleting contact list:', error);
+      return false;
+    }
+    
+    return true;
+  }
+
+  async getContactsInList(listId: number): Promise<Contact[]> {
+    const { data, error } = await supabase
+      .from('contact_list_members')
+      .select(`
+        contacts (*)
+      `)
+      .eq('contact_list_id', listId);
+    
+    if (error) {
+      throw new Error(`Error fetching contacts in list: ${error.message}`);
+    }
+    
+    return data.map(item => item.contacts).filter(Boolean) as Contact[];
+  }
+
+  async updateContactsInList(
+    listId: number,
+    contactIds: number[],
+  ): Promise<boolean> {
+    try {
+      // Remove existing members
+      await supabase
+        .from('contact_list_members')
+        .delete()
+        .eq('contact_list_id', listId);
+      
+      // Add new members
+      if (contactIds.length > 0) {
+        const members = contactIds.map(contactId => ({
+          contact_list_id: listId,
+          contact_id: contactId,
+        }));
+        
+        const { error } = await supabase
+          .from('contact_list_members')
+          .insert(members);
+        
+        if (error) {
+          throw error;
+        }
+      }
+      
+      // Update contact count
+      await supabase
+        .from('contact_lists')
+        .update({
+          contact_count: contactIds.length,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', listId);
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating contacts in list:', error);
+      return false;
+    }
   }
 
   // Admin operations
   async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(desc(users.createdAt));
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      throw new Error(`Error fetching all users: ${error.message}`);
+    }
+    
+    return data as User[];
   }
 
   async getUserStats(): Promise<{
@@ -395,132 +663,23 @@ export class DatabaseStorage implements IStorage {
     totalCampaigns: number;
     totalMessages: number;
   }> {
-    const [totalUsersResult] = await db.select({ count: count() }).from(users);
+    const [totalUsersResult, activeUsersResult, totalCampaignsResult, totalMessagesResult] = await Promise.all([
+      supabase.from('users').select('*', { count: 'exact', head: true }),
+      supabase.from('users').select('*', { count: 'exact', head: true }).eq('subscription_status', 'active'),
+      supabase.from('campaigns').select('*', { count: 'exact', head: true }),
+      supabase.from('campaigns').select('sent_count'),
+    ]);
 
-    const [activeUsersResult] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(eq(users.subscriptionStatus, "active"));
-
-    const [totalCampaignsResult] = await db
-      .select({ count: count() })
-      .from(campaigns);
-
-    const [totalMessagesResult] = await db
-      .select({ total: sum(campaigns.sentCount) })
-      .from(campaigns);
+    const totalMessages = totalMessagesResult.data?.reduce((sum, campaign) => 
+      sum + (campaign.sent_count || 0), 0) || 0;
 
     return {
-      totalUsers: totalUsersResult.count,
-      activeUsers: activeUsersResult.count,
-      totalCampaigns: totalCampaignsResult.count,
-      totalMessages: Number(totalMessagesResult.total || 0),
+      totalUsers: totalUsersResult.count || 0,
+      activeUsers: activeUsersResult.count || 0,
+      totalCampaigns: totalCampaignsResult.count || 0,
+      totalMessages,
     };
-  }
-
-  // Contact List operations
-  async createContactList(
-    contactList: InsertContactList,
-  ): Promise<ContactList> {
-    const [newList] = await db
-      .insert(contactLists)
-      .values(contactList)
-      .returning();
-    return newList;
-  }
-
-  async getContactLists(userId: string): Promise<ContactList[]> {
-    return await db
-      .select()
-      .from(contactLists)
-      .where(eq(contactLists.userId, userId))
-      .orderBy(desc(contactLists.createdAt));
-  }
-
-  async getContactList(
-    id: number,
-    userId: string,
-  ): Promise<ContactList | undefined> {
-    const [contactList] = await db
-      .select()
-      .from(contactLists)
-      .where(and(eq(contactLists.id, id), eq(contactLists.userId, userId)));
-    return contactList;
-  }
-
-  async updateContactList(
-    id: number,
-    updates: Partial<ContactList>,
-  ): Promise<ContactList> {
-    const [contactList] = await db
-      .update(contactLists)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(contactLists.id, id))
-      .returning();
-    return contactList;
-  }
-
-  async deleteContactList(id: number, userId: string): Promise<boolean> {
-    const result = await db
-      .delete(contactLists)
-      .where(and(eq(contactLists.id, id), eq(contactLists.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // Novos métodos implementados com abordagem alternativa
-  async getContactsInList(listId: number): Promise<Contact[]> {
-    // Assumindo que há um campo listId no modelo Contact
-    // Se não existir essa relação direta, você precisará criar uma tabela de junção no schema
-    try {
-      // Primeiro, obtemos a lista para verificar seu userId
-      const [list] = await db
-        .select()
-        .from(contactLists)
-        .where(eq(contactLists.id, listId));
-
-      if (!list) {
-        return [];
-      }
-
-      // Busca contatos que têm o campo listId igual ao id da lista
-      // Ou se esse campo não existir, será necessário outra abordagem
-      return await db
-        .select()
-        .from(contacts)
-        .where(eq(contacts.userId, list.userId));
-    } catch (error) {
-      console.error("Error getting contacts in list:", error);
-      return [];
-    }
-  }
-
-  async updateContactsInList(
-    listId: number,
-    contactIds: number[],
-  ): Promise<boolean> {
-    try {
-      // Como não temos uma tabela de junção, precisamos assumir como funciona a relação
-      // Abordagem 1: Cada contato tem um campo listId (se esse for o caso)
-      // Abordagem 2: Criar uma tabela de junção no schema (recomendado)
-
-      // Por enquanto, atualizamos apenas a contagem de contatos na lista
-      await db
-        .update(contactLists)
-        .set({
-          contactCount: contactIds.length,
-          updatedAt: new Date(),
-        })
-        .where(eq(contactLists.id, listId));
-
-      // Aqui você precisaria implementar a lógica para associar os contatos à lista
-      // dependendo de como sua estrutura de dados está configurada
-
-      return true;
-    } catch (error) {
-      console.error("Error updating contacts in list:", error);
-      return false;
-    }
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new SupabaseStorage();

@@ -1,242 +1,235 @@
-import {
-  pgTable,
-  text,
-  varchar,
-  timestamp,
-  jsonb,
-  index,
-  serial,
-  boolean,
-  integer,
-  decimal,
-} from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { relations } from "drizzle-orm";
 
-// Session storage table (mandatory for Replit Auth)
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
+// User types
+export interface User {
+  id: string;
+  email: string;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  isAdmin?: boolean;
+  subscriptionStatus?: string;
+  trialEndsAt?: Date;
+  campaignCount?: number;
+  contactCount?: number;
+  mercadopagoSubscriptionId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
-// User storage table
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().notNull(),
-  email: varchar("email").unique().notNull(),
-  password: varchar("password"),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
-  isAdmin: boolean("is_admin").default(false),
-  subscriptionStatus: varchar("subscription_status").default("trial"),
-  trialEndsAt: timestamp("trial_ends_at").defaultNow(),
-  campaignCount: integer("campaign_count").default(0),
-  contactCount: integer("contact_count").default(0),
-  mercadopagoSubscriptionId: varchar("mercadopago_subscription_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export interface UpsertUser {
+  id: string;
+  email: string;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  isAdmin?: boolean;
+  subscriptionStatus?: string;
+  trialEndsAt?: Date;
+  campaignCount?: number;
+  contactCount?: number;
+  mercadopagoSubscriptionId?: string;
+}
+
+// Campaign types
+export interface Campaign {
+  id: number;
+  userId: string;
+  name: string;
+  message: string;
+  imageUrl?: string;
+  status?: string;
+  totalContacts?: number;
+  sentCount?: number;
+  failedCount?: number;
+  delayMin?: number;
+  delayMax?: number;
+  batchSize?: number;
+  batchDelay?: number;
+  scheduledAt?: Date;
+  contactListId?: number;
+  scheduledContactsData?: string;
+  errorMessage?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  scheduledContacts?: number[];
+}
+
+export interface InsertCampaign {
+  userId: string;
+  name: string;
+  message: string;
+  imageUrl?: string;
+  status?: string;
+  totalContacts?: number;
+  sentCount?: number;
+  failedCount?: number;
+  delayMin?: number;
+  delayMax?: number;
+  batchSize?: number;
+  batchDelay?: number;
+  scheduledAt?: Date;
+  contactListId?: number;
+  scheduledContactsData?: string;
+  errorMessage?: string;
+}
+
+// Contact types
+export interface Contact {
+  id: number;
+  userId: string;
+  campaignId?: number;
+  contactListId?: number;
+  name: string;
+  phone: string;
+  email?: string;
+  lastCampaignSent?: Date;
+  totalCampaignsSent?: number;
+  customData?: any;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface InsertContact {
+  userId: string;
+  campaignId?: number;
+  contactListId?: number;
+  name: string;
+  phone: string;
+  email?: string;
+  lastCampaignSent?: Date;
+  totalCampaignsSent?: number;
+  customData?: any;
+}
+
+// Campaign Log types
+export interface CampaignLog {
+  id: number;
+  campaignId: number;
+  contactId: number;
+  status: string;
+  errorMessage?: string;
+  sentAt?: Date;
+  createdAt?: Date;
+}
+
+export interface InsertCampaignLog {
+  campaignId: number;
+  contactId: number;
+  status: string;
+  errorMessage?: string;
+  sentAt?: Date;
+}
+
+// WhatsApp Session types
+export interface WhatsappSession {
+  id: number;
+  userId: string;
+  sessionId: string;
+  isConnected?: boolean;
+  qrCode?: string;
+  lastConnected?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface InsertWhatsappSession {
+  userId: string;
+  sessionId: string;
+  isConnected?: boolean;
+  qrCode?: string;
+  lastConnected?: Date;
+}
+
+// Contact List types
+export interface ContactList {
+  id: number;
+  userId: string;
+  name: string;
+  description?: string;
+  color?: string;
+  contactCount?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface InsertContactList {
+  userId: string;
+  name: string;
+  description?: string;
+  color?: string;
+  contactCount?: number;
+}
+
+// Validation schemas
+export const insertUserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  password: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  profileImageUrl: z.string().optional(),
+  isAdmin: z.boolean().optional(),
+  subscriptionStatus: z.string().optional(),
+  trialEndsAt: z.date().optional(),
+  campaignCount: z.number().optional(),
+  contactCount: z.number().optional(),
+  mercadopagoSubscriptionId: z.string().optional(),
 });
 
-// Campaigns table
-export const campaigns = pgTable("campaigns", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id")
-    .notNull()
-    .references(() => users.id),
-  name: varchar("name").notNull(),
-  message: text("message").notNull(),
-  imageUrl: varchar("image_url"),
-  status: varchar("status").default("draft"), // draft, scheduled, sending, completed, failed
-  totalContacts: integer("total_contacts").default(0),
-  sentCount: integer("sent_count").default(0),
-  failedCount: integer("failed_count").default(0),
-  delayMin: integer("delay_min").default(6),
-  delayMax: integer("delay_max").default(12),
-  batchSize: integer("batch_size").default(10),
-  batchDelay: integer("batch_delay").default(60),
-  scheduledAt: timestamp("scheduled_at"),
-  contactListId: integer("contact_list_id").references(() => contactLists.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  scheduledContactsData: text("scheduled_contacts_data"), // Novo campo para armazenar IDs de contatos como JSON
-  errorMessage: text("error_message"), // Novo campo para armazenar mensagens de erro
+export const insertCampaignSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+  message: z.string(),
+  imageUrl: z.string().optional(),
+  status: z.string().optional(),
+  totalContacts: z.number().optional(),
+  sentCount: z.number().optional(),
+  failedCount: z.number().optional(),
+  delayMin: z.number().optional(),
+  delayMax: z.number().optional(),
+  batchSize: z.number().optional(),
+  batchDelay: z.number().optional(),
+  scheduledAt: z.date().optional(),
+  contactListId: z.number().optional(),
+  scheduledContactsData: z.string().optional(),
+  errorMessage: z.string().optional(),
 });
 
-// Contact lists table
-export const contactLists = pgTable("contact_lists", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id")
-    .notNull()
-    .references(() => users.id),
-  name: varchar("name").notNull(),
-  description: varchar("description"),
-  color: varchar("color").default("#3b82f6"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export const insertContactSchema = z.object({
+  userId: z.string(),
+  campaignId: z.number().optional(),
+  contactListId: z.number().optional(),
+  name: z.string(),
+  phone: z.string(),
+  email: z.string().optional(),
+  lastCampaignSent: z.date().optional(),
+  totalCampaignsSent: z.number().optional(),
+  customData: z.any().optional(),
 });
 
-// Contacts table
-export const contacts = pgTable("contacts", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id")
-    .notNull()
-    .references(() => users.id),
-  campaignId: integer("campaign_id").references(() => campaigns.id),
-  contactListId: integer("contact_list_id").references(() => contactLists.id),
-  name: varchar("name").notNull(),
-  phone: varchar("phone").notNull(),
-  email: varchar("email"),
-  lastCampaignSent: timestamp("last_campaign_sent"),
-  totalCampaignsSent: integer("total_campaigns_sent").default(0),
-  customData: jsonb("custom_data"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export const insertCampaignLogSchema = z.object({
+  campaignId: z.number(),
+  contactId: z.number(),
+  status: z.string(),
+  errorMessage: z.string().optional(),
+  sentAt: z.date().optional(),
 });
 
-// Campaign logs table
-export const campaignLogs = pgTable("campaign_logs", {
-  id: serial("id").primaryKey(),
-  campaignId: integer("campaign_id")
-    .notNull()
-    .references(() => campaigns.id),
-  contactId: integer("contact_id")
-    .notNull()
-    .references(() => contacts.id),
-  status: varchar("status").notNull(), // sent, failed, pending
-  errorMessage: text("error_message"),
-  sentAt: timestamp("sent_at"),
-  createdAt: timestamp("created_at").defaultNow(),
+export const insertWhatsappSessionSchema = z.object({
+  userId: z.string(),
+  sessionId: z.string(),
+  isConnected: z.boolean().optional(),
+  qrCode: z.string().optional(),
+  lastConnected: z.date().optional(),
 });
 
-// WhatsApp sessions table
-export const whatsappSessions = pgTable("whatsapp_sessions", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id")
-    .notNull()
-    .references(() => users.id),
-  sessionId: varchar("session_id").notNull().unique(),
-  isConnected: boolean("is_connected").default(false),
-  qrCode: text("qr_code"),
-  lastConnected: timestamp("last_connected"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export const insertContactListSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  color: z.string().optional(),
+  contactCount: z.number().optional(),
 });
-
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  campaigns: many(campaigns),
-  contacts: many(contacts),
-  contactLists: many(contactLists),
-  whatsappSessions: many(whatsappSessions),
-}));
-
-export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
-  user: one(users, {
-    fields: [campaigns.userId],
-    references: [users.id],
-  }),
-  contactList: one(contactLists, {
-    fields: [campaigns.contactListId],
-    references: [contactLists.id],
-  }),
-  contacts: many(contacts),
-  logs: many(campaignLogs),
-}));
-
-export const contactListsRelations = relations(
-  contactLists,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [contactLists.userId],
-      references: [users.id],
-    }),
-    contacts: many(contacts),
-    campaigns: many(campaigns),
-  }),
-);
-
-export const contactsRelations = relations(contacts, ({ one }) => ({
-  user: one(users, {
-    fields: [contacts.userId],
-    references: [users.id],
-  }),
-  campaign: one(campaigns, {
-    fields: [contacts.campaignId],
-    references: [campaigns.id],
-  }),
-  contactList: one(contactLists, {
-    fields: [contacts.contactListId],
-    references: [contactLists.id],
-  }),
-}));
-
-export const campaignLogsRelations = relations(campaignLogs, ({ one }) => ({
-  campaign: one(campaigns, {
-    fields: [campaignLogs.campaignId],
-    references: [campaigns.id],
-  }),
-  contact: one(contacts, {
-    fields: [campaignLogs.contactId],
-    references: [contacts.id],
-  }),
-}));
-
-export const whatsappSessionsRelations = relations(
-  whatsappSessions,
-  ({ one }) => ({
-    user: one(users, {
-      fields: [whatsappSessions.userId],
-      references: [users.id],
-    }),
-  }),
-);
-
-// Schemas
-export const insertUserSchema = createInsertSchema(users);
-export const insertCampaignSchema = createInsertSchema(campaigns).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertContactSchema = createInsertSchema(contacts).omit({
-  id: true,
-  createdAt: true,
-});
-export const insertCampaignLogSchema = createInsertSchema(campaignLogs).omit({
-  id: true,
-  createdAt: true,
-});
-export const insertWhatsappSessionSchema = createInsertSchema(
-  whatsappSessions,
-).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertContactListSchema = createInsertSchema(contactLists).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-// Types
-export type UpsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
-export type Campaign = typeof campaigns.$inferSelect & {
-  scheduledContacts?: number[]; // Tipo extendido para incluir contatos agendados
-};
-export type InsertContact = z.infer<typeof insertContactSchema>;
-export type Contact = typeof contacts.$inferSelect;
-export type InsertCampaignLog = z.infer<typeof insertCampaignLogSchema>;
-export type CampaignLog = typeof campaignLogs.$inferSelect;
-export type InsertWhatsappSession = z.infer<typeof insertWhatsappSessionSchema>;
-export type WhatsappSession = typeof whatsappSessions.$inferSelect;
-export type InsertContactList = z.infer<typeof insertContactListSchema>;
-export type ContactList = typeof contactLists.$inferSelect;

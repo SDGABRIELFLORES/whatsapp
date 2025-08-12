@@ -6,8 +6,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
-import connectPg from "connect-pg-simple";
-import { pool } from "./db";
+import { supabase } from "./db";
 
 declare global {
   namespace Express {
@@ -30,17 +29,70 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export function setupAuth(app: Express) {
-  const PostgresSessionStore = connectPg(session);
+// Custom session store for Supabase
+class SupabaseSessionStore extends session.Store {
+  async get(sid: string, callback: (err?: any, session?: session.SessionData | null) => void) {
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('sess, expire')
+        .eq('sid', sid)
+        .single();
+      
+      if (error || !data) {
+        return callback(null, null);
+      }
+      
+      // Check if session is expired
+      if (new Date(data.expire) < new Date()) {
+        await this.destroy(sid, () => {});
+        return callback(null, null);
+      }
+      
+      callback(null, data.sess);
+    } catch (error) {
+      callback(error);
+    }
+  }
 
+  async set(sid: string, session: session.SessionData, callback?: (err?: any) => void) {
+    try {
+      const expire = new Date(Date.now() + (session.cookie?.maxAge || 86400000));
+      
+      await supabase
+        .from('sessions')
+        .upsert({
+          sid,
+          sess: session,
+          expire: expire.toISOString(),
+        });
+      
+      callback?.();
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+
+  async destroy(sid: string, callback?: (err?: any) => void) {
+    try {
+      await supabase
+        .from('sessions')
+        .delete()
+        .eq('sid', sid);
+      
+      callback?.();
+    } catch (error) {
+      callback?.(error);
+    }
+  }
+}
+
+export function setupAuth(app: Express) {
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "dev-secret-key",
     resave: false,
     saveUninitialized: false,
-    store: new PostgresSessionStore({
-      pool,
-      createTableIfMissing: false,
-    }),
+    store: new SupabaseSessionStore(),
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,

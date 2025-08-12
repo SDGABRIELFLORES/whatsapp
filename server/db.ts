@@ -1,15 +1,14 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
-import * as schema from "@shared/schema";
+import { createClient } from '@supabase/supabase-js';
 
-neonConfig.webSocketConstructor = ws;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const DATABASE_URL = process.env.DATABASE_URL || "postgresql://user:password@localhost:5432/campanhawhats";
-
-if (!process.env.DATABASE_URL) {
-  console.warn("Warning: DATABASE_URL not set, using default local database URL");
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY devem estar configurados');
 }
 
-export const pool = new Pool({ connectionString: DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+export const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// Para compatibilidade com o código existente
+export const db = supabase;
+export const pool = null; // Não usado com Supabase
