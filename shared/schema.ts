@@ -46,7 +46,9 @@ export const users = pgTable("users", {
 // Campaigns table
 export const campaigns = pgTable("campaigns", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
   name: varchar("name").notNull(),
   message: text("message").notNull(),
   imageUrl: varchar("image_url"),
@@ -62,12 +64,16 @@ export const campaigns = pgTable("campaigns", {
   contactListId: integer("contact_list_id").references(() => contactLists.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  scheduledContactsData: text("scheduled_contacts_data"), // Novo campo para armazenar IDs de contatos como JSON
+  errorMessage: text("error_message"), // Novo campo para armazenar mensagens de erro
 });
 
 // Contact lists table
 export const contactLists = pgTable("contact_lists", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
   name: varchar("name").notNull(),
   description: varchar("description"),
   color: varchar("color").default("#3b82f6"),
@@ -78,7 +84,9 @@ export const contactLists = pgTable("contact_lists", {
 // Contacts table
 export const contacts = pgTable("contacts", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
   campaignId: integer("campaign_id").references(() => campaigns.id),
   contactListId: integer("contact_list_id").references(() => contactLists.id),
   name: varchar("name").notNull(),
@@ -94,8 +102,12 @@ export const contacts = pgTable("contacts", {
 // Campaign logs table
 export const campaignLogs = pgTable("campaign_logs", {
   id: serial("id").primaryKey(),
-  campaignId: integer("campaign_id").notNull().references(() => campaigns.id),
-  contactId: integer("contact_id").notNull().references(() => contacts.id),
+  campaignId: integer("campaign_id")
+    .notNull()
+    .references(() => campaigns.id),
+  contactId: integer("contact_id")
+    .notNull()
+    .references(() => contacts.id),
   status: varchar("status").notNull(), // sent, failed, pending
   errorMessage: text("error_message"),
   sentAt: timestamp("sent_at"),
@@ -105,7 +117,9 @@ export const campaignLogs = pgTable("campaign_logs", {
 // WhatsApp sessions table
 export const whatsappSessions = pgTable("whatsapp_sessions", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
   sessionId: varchar("session_id").notNull().unique(),
   isConnected: boolean("is_connected").default(false),
   qrCode: text("qr_code"),
@@ -135,14 +149,17 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
   logs: many(campaignLogs),
 }));
 
-export const contactListsRelations = relations(contactLists, ({ one, many }) => ({
-  user: one(users, {
-    fields: [contactLists.userId],
-    references: [users.id],
+export const contactListsRelations = relations(
+  contactLists,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [contactLists.userId],
+      references: [users.id],
+    }),
+    contacts: many(contacts),
+    campaigns: many(campaigns),
   }),
-  contacts: many(contacts),
-  campaigns: many(campaigns),
-}));
+);
 
 export const contactsRelations = relations(contacts, ({ one }) => ({
   user: one(users, {
@@ -170,12 +187,15 @@ export const campaignLogsRelations = relations(campaignLogs, ({ one }) => ({
   }),
 }));
 
-export const whatsappSessionsRelations = relations(whatsappSessions, ({ one }) => ({
-  user: one(users, {
-    fields: [whatsappSessions.userId],
-    references: [users.id],
+export const whatsappSessionsRelations = relations(
+  whatsappSessions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [whatsappSessions.userId],
+      references: [users.id],
+    }),
   }),
-}));
+);
 
 // Schemas
 export const insertUserSchema = createInsertSchema(users);
@@ -192,7 +212,9 @@ export const insertCampaignLogSchema = createInsertSchema(campaignLogs).omit({
   id: true,
   createdAt: true,
 });
-export const insertWhatsappSessionSchema = createInsertSchema(whatsappSessions).omit({
+export const insertWhatsappSessionSchema = createInsertSchema(
+  whatsappSessions,
+).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -207,7 +229,9 @@ export const insertContactListSchema = createInsertSchema(contactLists).omit({
 export type UpsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
-export type Campaign = typeof campaigns.$inferSelect;
+export type Campaign = typeof campaigns.$inferSelect & {
+  scheduledContacts?: number[]; // Tipo extendido para incluir contatos agendados
+};
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type Contact = typeof contacts.$inferSelect;
 export type InsertCampaignLog = z.infer<typeof insertCampaignLogSchema>;

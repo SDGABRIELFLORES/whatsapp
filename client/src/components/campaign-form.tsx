@@ -21,9 +21,25 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import FileUpload from "@/components/ui/file-upload";
 import ImageUpload from "@/components/image-upload";
-import { Upload, Users, Send, Clock, UserRound, Filter, Calendar, List, Play } from "lucide-react";
+import {
+  Upload,
+  Users,
+  Send,
+  Clock,
+  UserRound,
+  Filter,
+  Calendar,
+  List,
+  Play,
+} from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
@@ -58,7 +74,11 @@ interface CampaignFormProps {
   editingCampaign?: any;
 }
 
-export default function CampaignForm({ onClose, onComplete, editingCampaign }: CampaignFormProps) {
+export default function CampaignForm({
+  onClose,
+  onComplete,
+  editingCampaign,
+}: CampaignFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -69,7 +89,9 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [daysFilter, setDaysFilter] = useState<number>(7);
   const [isFiltered, setIsFiltered] = useState<boolean>(false);
-  const [executionType, setExecutionType] = useState<"now" | "scheduled">("now");
+  const [executionType, setExecutionType] = useState<"now" | "scheduled">(
+    "now",
+  );
 
   const form = useForm<CampaignFormData>({
     resolver: zodResolver(campaignSchema),
@@ -145,9 +167,11 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
         formData.append("image", imageFile);
       }
 
-      const url = editingCampaign ? `/api/campaigns/${editingCampaign.id}` : "/api/campaigns";
+      const url = editingCampaign
+        ? `/api/campaigns/${editingCampaign.id}`
+        : "/api/campaigns";
       const method = editingCampaign ? "PUT" : "POST";
-      
+
       const response = await fetch(url, {
         method,
         body: formData,
@@ -334,6 +358,18 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
     setSelectedContacts([]);
   };
 
+  // Função para formatar a data atual no formato local usado pelo input datetime-local
+  const getLocalDateTimeString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   if (step === "form") {
     return (
       <Card>
@@ -398,7 +434,7 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
               />
 
               <div>
-                <FormLabel>Imagem (opcional)</FormLabel>
+                <Label>Imagem (opcional)</Label>
                 <ImageUpload
                   onImageUpload={setImageFile}
                   onImageRemove={() => setImageFile(null)}
@@ -409,10 +445,12 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
               </div>
 
               <div>
-                <FormLabel>Execução da Campanha</FormLabel>
-                <RadioGroup 
-                  value={executionType} 
-                  onValueChange={(value) => setExecutionType(value as "now" | "scheduled")}
+                <Label>Execução da Campanha</Label>
+                <RadioGroup
+                  value={executionType}
+                  onValueChange={(value) =>
+                    setExecutionType(value as "now" | "scheduled")
+                  }
                   className="mt-2"
                 >
                   <div className="flex items-center space-x-2">
@@ -424,7 +462,10 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="scheduled" id="scheduled" />
-                    <Label htmlFor="scheduled" className="flex items-center gap-2">
+                    <Label
+                      htmlFor="scheduled"
+                      className="flex items-center gap-2"
+                    >
                       <Calendar className="w-4 h-4" />
                       Agendar para data/hora específica
                     </Label>
@@ -443,7 +484,7 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
                         <Input
                           type="datetime-local"
                           {...field}
-                          min={new Date().toISOString().slice(0, 16)}
+                          min={getLocalDateTimeString()}
                         />
                       </FormControl>
                       <FormMessage />
@@ -542,8 +583,12 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
                 disabled={createCampaignMutation.isPending}
               >
                 {createCampaignMutation.isPending
-                  ? editingCampaign ? "Salvando..." : "Criando..."
-                  : editingCampaign ? "Salvar Alterações" : "Criar Campanha"}
+                  ? editingCampaign
+                    ? "Salvando..."
+                    : "Criando..."
+                  : editingCampaign
+                    ? "Salvar Alterações"
+                    : "Criar Campanha"}
               </Button>
             </form>
           </Form>
@@ -596,10 +641,10 @@ export default function CampaignForm({ onClose, onComplete, editingCampaign }: C
                   </h3>
                   <div className="flex items-end gap-2">
                     <div className="flex-1">
-                      <FormLabel className="text-sm">
+                      <Label className="text-sm">
                         Enviar apenas para contatos que não receberam nos
                         últimos:
-                      </FormLabel>
+                      </Label>
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"

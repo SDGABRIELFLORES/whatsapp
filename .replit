@@ -34,3 +34,21 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "PUSH"
+mode = "sequential"
+author = 45048093
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run db:push"
+
+[[workflows.workflow]]
+name = "git"
+mode = "sequential"
+author = 45048093
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "git init"
